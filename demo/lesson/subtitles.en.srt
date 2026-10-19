@@ -1,0 +1,17 @@
+﻿1
+00:00:00,100 --> 00:00:02,700
+Welcome to your English study studio.
+
+2
+00:00:02,700 --> 00:00:08,040
+You can learn from short clips,
+interviews and long courses.
+
+3
+00:00:08,040 --> 00:00:14,380
+Listen to one sentence,
+notice useful expressions, and then play it again.
+
+4
+00:00:14,380 --> 00:00:17,520
+Small steps can make a real difference.

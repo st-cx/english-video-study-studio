@@ -1,0 +1,826 @@
+{
+  "version": 4,
+  "episode": {
+    "id": "demo-small-steps",
+    "title": "Small steps make a real difference",
+    "title_zh": "小小步伐带来真正改变",
+    "source_url": "",
+    "audio_url": "",
+    "duration_s": 18.133,
+    "source_date": "",
+    "cover": "cover.jpg",
+    "audio_file": "audio.mp3",
+    "fingerprint": "00e326038ba3b481faa7833e069b285bc1f1284c66a70d419795876058be278e",
+    "created_at": "2026-10-19T08:41:31.675107+00:00"
+  },
+  "source": {
+    "kind": "local",
+    "name": "本地视频",
+    "url": "",
+    "transcript_kind": "none"
+  },
+  "media": {
+    "video_file": "source.mp4",
+    "audio_file": "audio.mp3",
+    "duration_s": 18.133,
+    "source_offset_ms": 0,
+    "audio_stream_index": 1
+  },
+  "sentences": [
+    {
+      "id": "s0000",
+      "start_ms": 100,
+      "end_ms": 2180,
+      "text": "Welcome to your English study studio.",
+      "translation": "欢迎来到你的英语学习工作室。",
+      "speaker": "",
+      "word_ids": [
+        "w00000",
+        "w00001",
+        "w00002",
+        "w00003",
+        "w00004",
+        "w00005"
+      ],
+      "card_ids": []
+    },
+    {
+      "id": "s0001",
+      "start_ms": 2700,
+      "end_ms": 6720,
+      "text": "You can learn from short clips, interviews and long courses.",
+      "translation": "你可以从短片段、访谈和长课程中学习。",
+      "speaker": "",
+      "word_ids": [
+        "w00006",
+        "w00007",
+        "w00008",
+        "w00009",
+        "w00010",
+        "w00011",
+        "w00012",
+        "w00013",
+        "w00014",
+        "w00015"
+      ],
+      "card_ids": [
+        "demo-learn-from"
+      ]
+    },
+    {
+      "id": "s0002",
+      "start_ms": 8040,
+      "end_ms": 13160,
+      "text": "Listen to one sentence, notice useful expressions, and then play it again.",
+      "translation": "听一个句子，注意有用的表达，然后再播放一遍。",
+      "speaker": "",
+      "word_ids": [
+        "w00016",
+        "w00017",
+        "w00018",
+        "w00019",
+        "w00020",
+        "w00021",
+        "w00022",
+        "w00023",
+        "w00024",
+        "w00025",
+        "w00026",
+        "w00027"
+      ],
+      "card_ids": []
+    },
+    {
+      "id": "s0003",
+      "start_ms": 14380,
+      "end_ms": 16320,
+      "text": "Small steps can make a real difference.",
+      "translation": "小步前进也能带来真正的改变。",
+      "speaker": "",
+      "word_ids": [
+        "w00028",
+        "w00029",
+        "w00030",
+        "w00031",
+        "w00032",
+        "w00033",
+        "w00034"
+      ],
+      "card_ids": [
+        "ch001-c0000"
+      ]
+    }
+  ],
+  "words": [
+    {
+      "id": "w00000",
+      "sentence_id": "s0000",
+      "index": 0,
+      "text": "Welcome",
+      "start_ms": 100,
+      "end_ms": 440,
+      "gloss_zh": "欢迎",
+      "probability": 0.7824,
+      "focus": true
+    },
+    {
+      "id": "w00001",
+      "sentence_id": "s0000",
+      "index": 1,
+      "text": "to",
+      "start_ms": 440,
+      "end_ms": 620,
+      "gloss_zh": "（介词，表方向）",
+      "probability": 0.9963,
+      "focus": false
+    },
+    {
+      "id": "w00002",
+      "sentence_id": "s0000",
+      "index": 2,
+      "text": "your",
+      "start_ms": 620,
+      "end_ms": 880,
+      "gloss_zh": "你的",
+      "probability": 0.9639,
+      "focus": false
+    },
+    {
+      "id": "w00003",
+      "sentence_id": "s0000",
+      "index": 3,
+      "text": "English",
+      "start_ms": 1200,
+      "end_ms": 1300,
+      "gloss_zh": "英语",
+      "probability": 0.9546,
+      "focus": false
+    },
+    {
+      "id": "w00004",
+      "sentence_id": "s0000",
+      "index": 4,
+      "text": "study",
+      "start_ms": 1300,
+      "end_ms": 1640,
+      "gloss_zh": "学习",
+      "probability": 0.8852,
+      "focus": true
+    },
+    {
+      "id": "w00005",
+      "sentence_id": "s0000",
+      "index": 5,
+      "text": "studio.",
+      "start_ms": 1640,
+      "end_ms": 2180,
+      "gloss_zh": "工作室",
+      "probability": 0.9914,
+      "focus": true
+    },
+    {
+      "id": "w00006",
+      "sentence_id": "s0001",
+      "index": 0,
+      "text": "You",
+      "start_ms": 2700,
+      "end_ms": 3320,
+      "gloss_zh": "你",
+      "probability": 0.9194242358207703,
+      "focus": false
+    },
+    {
+      "id": "w00007",
+      "sentence_id": "s0001",
+      "index": 1,
+      "text": "can",
+      "start_ms": 3340,
+      "end_ms": 3560,
+      "gloss_zh": "可以",
+      "probability": 0.9991,
+      "focus": false
+    },
+    {
+      "id": "w00008",
+      "sentence_id": "s0001",
+      "index": 2,
+      "text": "learn",
+      "start_ms": 3560,
+      "end_ms": 3800,
+      "gloss_zh": "学习",
+      "probability": 0.9991,
+      "focus": true
+    },
+    {
+      "id": "w00009",
+      "sentence_id": "s0001",
+      "index": 3,
+      "text": "from",
+      "start_ms": 3800,
+      "end_ms": 4100,
+      "gloss_zh": "从",
+      "probability": 0.9973,
+      "focus": false
+    },
+    {
+      "id": "w00010",
+      "sentence_id": "s0001",
+      "index": 4,
+      "text": "short",
+      "start_ms": 4100,
+      "end_ms": 4460,
+      "gloss_zh": "短的",
+      "probability": 0.9961,
+      "focus": true
+    },
+    {
+      "id": "w00011",
+      "sentence_id": "s0001",
+      "index": 5,
+      "text": "clips,",
+      "start_ms": 4460,
+      "end_ms": 5120,
+      "gloss_zh": "片段",
+      "probability": 0.9972,
+      "focus": true
+    },
+    {
+      "id": "w00012",
+      "sentence_id": "s0001",
+      "index": 6,
+      "text": "interviews",
+      "start_ms": 5120,
+      "end_ms": 5700,
+      "gloss_zh": "访谈",
+      "probability": 0.9972,
+      "focus": true
+    },
+    {
+      "id": "w00013",
+      "sentence_id": "s0001",
+      "index": 7,
+      "text": "and",
+      "start_ms": 5700,
+      "end_ms": 6100,
+      "gloss_zh": "和",
+      "probability": 0.5912,
+      "focus": false
+    },
+    {
+      "id": "w00014",
+      "sentence_id": "s0001",
+      "index": 8,
+      "text": "long",
+      "start_ms": 6360,
+      "end_ms": 6460,
+      "gloss_zh": "长的",
+      "probability": 0.9969,
+      "focus": false
+    },
+    {
+      "id": "w00015",
+      "sentence_id": "s0001",
+      "index": 9,
+      "text": "courses.",
+      "start_ms": 6460,
+      "end_ms": 6720,
+      "gloss_zh": "课程",
+      "probability": 0.9974,
+      "focus": false
+    },
+    {
+      "id": "w00016",
+      "sentence_id": "s0002",
+      "index": 0,
+      "text": "Listen",
+      "start_ms": 8040,
+      "end_ms": 8340,
+      "gloss_zh": "听",
+      "probability": 0.976,
+      "focus": true
+    },
+    {
+      "id": "w00017",
+      "sentence_id": "s0002",
+      "index": 1,
+      "text": "to",
+      "start_ms": 8340,
+      "end_ms": 8540,
+      "gloss_zh": "（动词不定式标记，无实义）",
+      "probability": 0.9941,
+      "focus": false
+    },
+    {
+      "id": "w00018",
+      "sentence_id": "s0002",
+      "index": 2,
+      "text": "one",
+      "start_ms": 8540,
+      "end_ms": 8800,
+      "gloss_zh": "一个",
+      "probability": 0.9935,
+      "focus": false
+    },
+    {
+      "id": "w00019",
+      "sentence_id": "s0002",
+      "index": 3,
+      "text": "sentence,",
+      "start_ms": 8800,
+      "end_ms": 9900,
+      "gloss_zh": "句子",
+      "probability": 0.9978,
+      "focus": true
+    },
+    {
+      "id": "w00020",
+      "sentence_id": "s0002",
+      "index": 4,
+      "text": "notice",
+      "start_ms": 9900,
+      "end_ms": 10200,
+      "gloss_zh": "注意",
+      "probability": 0.9944,
+      "focus": true
+    },
+    {
+      "id": "w00021",
+      "sentence_id": "s0002",
+      "index": 5,
+      "text": "useful",
+      "start_ms": 10200,
+      "end_ms": 10660,
+      "gloss_zh": "有用的",
+      "probability": 0.9986,
+      "focus": true
+    },
+    {
+      "id": "w00022",
+      "sentence_id": "s0002",
+      "index": 6,
+      "text": "expressions,",
+      "start_ms": 10660,
+      "end_ms": 11940,
+      "gloss_zh": "表达",
+      "probability": 0.9971,
+      "focus": true
+    },
+    {
+      "id": "w00023",
+      "sentence_id": "s0002",
+      "index": 7,
+      "text": "and",
+      "start_ms": 11940,
+      "end_ms": 12080,
+      "gloss_zh": "和",
+      "probability": 0.9903,
+      "focus": false
+    },
+    {
+      "id": "w00024",
+      "sentence_id": "s0002",
+      "index": 8,
+      "text": "then",
+      "start_ms": 12080,
+      "end_ms": 12300,
+      "gloss_zh": "然后",
+      "probability": 0.9986,
+      "focus": false
+    },
+    {
+      "id": "w00025",
+      "sentence_id": "s0002",
+      "index": 9,
+      "text": "play",
+      "start_ms": 12300,
+      "end_ms": 12580,
+      "gloss_zh": "播放",
+      "probability": 0.9966,
+      "focus": true
+    },
+    {
+      "id": "w00026",
+      "sentence_id": "s0002",
+      "index": 10,
+      "text": "it",
+      "start_ms": 12580,
+      "end_ms": 12820,
+      "gloss_zh": "它",
+      "probability": 0.9951,
+      "focus": false
+    },
+    {
+      "id": "w00027",
+      "sentence_id": "s0002",
+      "index": 11,
+      "text": "again.",
+      "start_ms": 12820,
+      "end_ms": 13160,
+      "gloss_zh": "再次",
+      "probability": 0.9992,
+      "focus": false
+    },
+    {
+      "id": "w00028",
+      "sentence_id": "s0003",
+      "index": 0,
+      "text": "Small",
+      "start_ms": 14380,
+      "end_ms": 14640,
+      "gloss_zh": "小的",
+      "probability": 0.958,
+      "focus": true
+    },
+    {
+      "id": "w00029",
+      "sentence_id": "s0003",
+      "index": 1,
+      "text": "steps",
+      "start_ms": 14640,
+      "end_ms": 15020,
+      "gloss_zh": "步伐",
+      "probability": 0.9924,
+      "focus": true
+    },
+    {
+      "id": "w00030",
+      "sentence_id": "s0003",
+      "index": 2,
+      "text": "can",
+      "start_ms": 15100,
+      "end_ms": 15240,
+      "gloss_zh": "能",
+      "probability": 0.9988,
+      "focus": false
+    },
+    {
+      "id": "w00031",
+      "sentence_id": "s0003",
+      "index": 3,
+      "text": "make",
+      "start_ms": 15240,
+      "end_ms": 15500,
+      "gloss_zh": "造成",
+      "probability": 0.9991,
+      "focus": true
+    },
+    {
+      "id": "w00032",
+      "sentence_id": "s0003",
+      "index": 4,
+      "text": "a",
+      "start_ms": 15500,
+      "end_ms": 15660,
+      "gloss_zh": "一个",
+      "probability": 0.998,
+      "focus": false
+    },
+    {
+      "id": "w00033",
+      "sentence_id": "s0003",
+      "index": 5,
+      "text": "real",
+      "start_ms": 15660,
+      "end_ms": 15860,
+      "gloss_zh": "真正的",
+      "probability": 0.9952,
+      "focus": true
+    },
+    {
+      "id": "w00034",
+      "sentence_id": "s0003",
+      "index": 6,
+      "text": "difference.",
+      "start_ms": 15860,
+      "end_ms": 16320,
+      "gloss_zh": "改变",
+      "probability": 0.9985,
+      "focus": true
+    }
+  ],
+  "cards": [
+    {
+      "id": "ch001-c0000",
+      "type": "vocab",
+      "title": "make a difference",
+      "meaning": "产生影响；带来改变",
+      "structure": "make + a + 形容词 + difference",
+      "example": "Small steps can make a real difference.",
+      "translation": "小步前进也能带来真正的改变。",
+      "word_ids": [
+        "w00028",
+        "w00029",
+        "w00031",
+        "w00032",
+        "w00033",
+        "w00034"
+      ],
+      "sentence_ids": [
+        "s0003"
+      ],
+      "start_ms": 14380,
+      "end_ms": 18133,
+      "points": [
+        {
+          "label": "短语",
+          "text": "make a difference 表示“有影响、起作用”"
+        },
+        {
+          "label": "用法",
+          "text": "可在 difference 前加 real 等形容词加强程度"
+        },
+        {
+          "label": "理解",
+          "text": "small steps 作主语，强调小行动也有效果"
+        }
+      ],
+      "display": false
+    },
+    {
+      "id": "demo-learn-from",
+      "type": "vocab",
+      "title": "learn from",
+      "meaning": "从……学习；向……学习",
+      "structure": "learn from + 人 / 经历 / 材料",
+      "example": "You can learn from short clips, interviews and long courses.",
+      "translation": "你可以从短片段、访谈和长课程中学习。",
+      "word_ids": [
+        "w00008",
+        "w00009"
+      ],
+      "sentence_ids": [
+        "s0001"
+      ],
+      "start_ms": 3560,
+      "end_ms": 18133,
+      "display": true,
+      "points": []
+    }
+  ],
+  "quality": {
+    "needs_review": false,
+    "flags": [],
+    "source_similarity": null,
+    "reference_available": false,
+    "review_chapter_ids": []
+  },
+  "review": {
+    "official_transcript": "",
+    "recognized_transcript": "Welcome to your English study studio. You can learn from short clips, interviews and long courses. Listen to one sentence, notice useful expressions, and then play it again. Small steps can make a real difference.",
+    "approved": false,
+    "demo_editorial_note": "Added a source-linked learn from explanation early enough to read for at least eight seconds. Late make a difference card remains in notes."
+  },
+  "render": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "status": "ready",
+    "english_subtitles": "subtitles.en.srt",
+    "chinese_subtitles": "subtitles.zh.srt",
+    "ass_file": "captions.ass",
+    "study_notes": "study-notes.md",
+    "video_file": "lesson.mp4"
+  },
+  "artifacts": {
+    "study": "ready",
+    "video": "ready"
+  },
+  "chapters": [
+    {
+      "id": "ch001",
+      "title": "学习单元 1",
+      "start_ms": 0,
+      "end_ms": 18133,
+      "status": "ready",
+      "flags": [],
+      "quality": {
+        "needs_review": false,
+        "flags": [],
+        "structural_flags": [],
+        "source_similarity": null,
+        "reference_available": false,
+        "mean_asr_confidence": 0.97,
+        "low_confidence_word_count": 0,
+        "timed_word_count": 35,
+        "bad_timestamp_count": 0
+      },
+      "teaching_review": {
+        "status": "passed",
+        "sentence_count": 4,
+        "corrections": [
+          {
+            "type": "word",
+            "id": "w00017",
+            "field": "gloss_zh",
+            "value": "（动词不定式标记，无实义）",
+            "reason": "此处 to 是 listen to 的介词，不表示方向“向”；listen to 整体意为“听……”。",
+            "before": "向"
+          },
+          {
+            "type": "word",
+            "id": "w00005",
+            "field": "gloss_zh",
+            "value": "工作室",
+            "reason": "studio. 的译文正确，保留。",
+            "before": "工作室"
+          }
+        ],
+        "note": "模型复核通过仍不能替代人工事实核验。"
+      }
+    }
+  ],
+  "phrases": [
+    {
+      "id": "ch001-p0000",
+      "sentence_id": "s0001",
+      "word_ids": [
+        "w00008",
+        "w00009"
+      ],
+      "text": "learn from",
+      "gloss_zh": "从……中学习",
+      "study": true
+    },
+    {
+      "id": "ch001-p0001",
+      "sentence_id": "s0001",
+      "word_ids": [
+        "w00010",
+        "w00011"
+      ],
+      "text": "short clips",
+      "gloss_zh": "短片段",
+      "study": false
+    },
+    {
+      "id": "ch001-p0002",
+      "sentence_id": "s0001",
+      "word_ids": [
+        "w00014",
+        "w00015"
+      ],
+      "text": "long courses",
+      "gloss_zh": "长课程",
+      "study": false
+    },
+    {
+      "id": "ch001-p0003",
+      "sentence_id": "s0002",
+      "word_ids": [
+        "w00020",
+        "w00021",
+        "w00022"
+      ],
+      "text": "notice useful expressions",
+      "gloss_zh": "注意有用的表达",
+      "study": true
+    },
+    {
+      "id": "ch001-p0004",
+      "sentence_id": "s0002",
+      "word_ids": [
+        "w00025",
+        "w00026",
+        "w00027"
+      ],
+      "text": "play it again",
+      "gloss_zh": "再播放一遍",
+      "study": true
+    },
+    {
+      "id": "ch001-p0005",
+      "sentence_id": "s0003",
+      "word_ids": [
+        "w00028",
+        "w00029"
+      ],
+      "text": "Small steps",
+      "gloss_zh": "小步",
+      "study": true
+    },
+    {
+      "id": "ch001-p0006",
+      "sentence_id": "s0003",
+      "word_ids": [
+        "w00031",
+        "w00032",
+        "w00033",
+        "w00034"
+      ],
+      "text": "make a real difference",
+      "gloss_zh": "带来真正的改变",
+      "study": true
+    }
+  ],
+  "layout": {
+    "version": 1,
+    "pages": [
+      {
+        "id": "ch001-s0000-p0",
+        "sentence_id": "s0000",
+        "start_ms": 100,
+        "end_ms": 2180,
+        "lines": [
+          [
+            "w00000",
+            "w00001",
+            "w00002",
+            "w00003",
+            "w00004",
+            "w00005"
+          ]
+        ],
+        "translation": "欢迎来到你的英语学习工作室。"
+      },
+      {
+        "id": "ch001-s0001-p0",
+        "sentence_id": "s0001",
+        "start_ms": 2700,
+        "end_ms": 6720,
+        "lines": [
+          [
+            "w00006",
+            "w00007",
+            "w00008",
+            "w00009",
+            "w00010",
+            "w00011"
+          ],
+          [
+            "w00012",
+            "w00013",
+            "w00014",
+            "w00015"
+          ]
+        ],
+        "translation": "你可以从短片段、访谈和长课程中学习。"
+      },
+      {
+        "id": "ch001-s0002-p0",
+        "sentence_id": "s0002",
+        "start_ms": 8040,
+        "end_ms": 13160,
+        "lines": [
+          [
+            "w00016",
+            "w00017",
+            "w00018",
+            "w00019"
+          ],
+          [
+            "w00020",
+            "w00021",
+            "w00022",
+            "w00023",
+            "w00024",
+            "w00025",
+            "w00026",
+            "w00027"
+          ]
+        ],
+        "translation": "听一个句子，注意有用的表达，然后再播放一遍。"
+      },
+      {
+        "id": "ch001-s0003-p0",
+        "sentence_id": "s0003",
+        "start_ms": 14380,
+        "end_ms": 16320,
+        "lines": [
+          [
+            "w00028",
+            "w00029",
+            "w00030",
+            "w00031",
+            "w00032",
+            "w00033",
+            "w00034"
+          ]
+        ],
+        "translation": "小步前进也能带来真正的改变。"
+      }
+    ]
+  },
+  "teaching_review": {
+    "status": "passed",
+    "sentence_count": 4,
+    "corrections": [
+      {
+        "type": "word",
+        "id": "w00001",
+        "field": "gloss_zh",
+        "value": "（介词，表方向）",
+        "reason": "“到”在此处不准确；to 是介词，表示“向/到”，但“到”易误解为动词，应简短说明语法作用。",
+        "before": "到"
+      },
+      {
+        "type": "word",
+        "id": "w00031",
+        "field": "gloss_zh",
+        "value": "造成",
+        "reason": "make a difference 的整体义为“产生影响/带来改变”，make 单独释义为“产生”不准确，应为“造成/产生”但“产生”可接受？原义“产生”也可接受，但更准确是“造成”。不，按整体短语解释，make 在此不单独译。原义“产生”可接受，不纠正。",
+        "before": "产生"
+      }
+    ],
+    "note": "模型复核通过仍不能替代人工事实核验。"
+  }
+}

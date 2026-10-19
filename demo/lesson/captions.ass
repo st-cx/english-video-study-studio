@@ -1,0 +1,61 @@
+﻿[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: English,Arial,48,&H00FFFFFF,&H0000A5FF,&H500B111C,&HA0000000,0,0,0,0,100,100,0,0,1,3,0,2,226,226,108,1
+Style: Chinese,Microsoft YaHei,36,&H00FFFFFF,&H0000A5FF,&H500B111C,&H950B111C,0,0,0,0,100,100,0,0,1,2,0,8,344,65,25,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.10,0:00:00.44,English,,0,0,0,,{\1c&H0057ADFF&}Welcome {\1c&H00FFFFFF&}to {\1c&H00FFFFFF&}your {\1c&H00FFFFFF&}English {\1c&H00FFFFFF&}study {\1c&H00FFFFFF&}studio.
+Dialogue: 0,0:00:00.44,0:00:00.62,English,,0,0,0,,{\1c&H0071D2F0&}Welcome {\1c&H0057ADFF&}to {\1c&H00FFFFFF&}your {\1c&H00FFFFFF&}English {\1c&H00FFFFFF&}study {\1c&H00FFFFFF&}studio.
+Dialogue: 0,0:00:00.62,0:00:00.88,English,,0,0,0,,{\1c&H0071D2F0&}Welcome {\1c&H0071D2F0&}to {\1c&H0057ADFF&}your {\1c&H00FFFFFF&}English {\1c&H00FFFFFF&}study {\1c&H00FFFFFF&}studio.
+Dialogue: 0,0:00:00.88,0:00:01.20,English,,0,0,0,,{\1c&H0071D2F0&}Welcome {\1c&H0071D2F0&}to {\1c&H0071D2F0&}your {\1c&H00FFFFFF&}English {\1c&H00FFFFFF&}study {\1c&H00FFFFFF&}studio.
+Dialogue: 0,0:00:01.20,0:00:01.30,English,,0,0,0,,{\1c&H0071D2F0&}Welcome {\1c&H0071D2F0&}to {\1c&H0071D2F0&}your {\1c&H0057ADFF&}English {\1c&H00FFFFFF&}study {\1c&H00FFFFFF&}studio.
+Dialogue: 0,0:00:01.30,0:00:01.64,English,,0,0,0,,{\1c&H0071D2F0&}Welcome {\1c&H0071D2F0&}to {\1c&H0071D2F0&}your {\1c&H0071D2F0&}English {\1c&H0057ADFF&}study {\1c&H00FFFFFF&}studio.
+Dialogue: 0,0:00:01.64,0:00:02.18,English,,0,0,0,,{\1c&H0071D2F0&}Welcome {\1c&H0071D2F0&}to {\1c&H0071D2F0&}your {\1c&H0071D2F0&}English {\1c&H0071D2F0&}study {\1c&H0057ADFF&}studio.
+Dialogue: 0,0:00:02.18,0:00:02.70,English,,0,0,0,,{\1c&H0071D2F0&}Welcome {\1c&H0071D2F0&}to {\1c&H0071D2F0&}your {\1c&H0071D2F0&}English {\1c&H0071D2F0&}study {\1c&H0071D2F0&}studio.
+Dialogue: 1,0:00:00.10,0:00:02.70,Chinese,,0,0,0,,欢迎来到你的英语学习工作室。
+Dialogue: 0,0:00:02.70,0:00:03.32,English,,0,0,0,,{\1c&H0057ADFF&}You {\1c&H00FFFFFF&}can {\1c&H00FFFFFF&}learn {\1c&H00FFFFFF&}from {\1c&H00FFFFFF&}short {\1c&H00FFFFFF&}clips,\N{\1c&H00FFFFFF&}interviews {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}long {\1c&H00FFFFFF&}courses.
+Dialogue: 0,0:00:03.32,0:00:03.34,English,,0,0,0,,{\1c&H0071D2F0&}You {\1c&H00FFFFFF&}can {\1c&H00FFFFFF&}learn {\1c&H00FFFFFF&}from {\1c&H00FFFFFF&}short {\1c&H00FFFFFF&}clips,\N{\1c&H00FFFFFF&}interviews {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}long {\1c&H00FFFFFF&}courses.
+Dialogue: 0,0:00:03.34,0:00:03.56,English,,0,0,0,,{\1c&H0071D2F0&}You {\1c&H0057ADFF&}can {\1c&H00FFFFFF&}learn {\1c&H00FFFFFF&}from {\1c&H00FFFFFF&}short {\1c&H00FFFFFF&}clips,\N{\1c&H00FFFFFF&}interviews {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}long {\1c&H00FFFFFF&}courses.
+Dialogue: 0,0:00:03.56,0:00:03.80,English,,0,0,0,,{\1c&H0071D2F0&}You {\1c&H0071D2F0&}can {\1c&H0057ADFF&}learn {\1c&H00FFFFFF&}from {\1c&H00FFFFFF&}short {\1c&H00FFFFFF&}clips,\N{\1c&H00FFFFFF&}interviews {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}long {\1c&H00FFFFFF&}courses.
+Dialogue: 0,0:00:03.80,0:00:04.10,English,,0,0,0,,{\1c&H0071D2F0&}You {\1c&H0071D2F0&}can {\1c&H0071D2F0&}learn {\1c&H0057ADFF&}from {\1c&H00FFFFFF&}short {\1c&H00FFFFFF&}clips,\N{\1c&H00FFFFFF&}interviews {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}long {\1c&H00FFFFFF&}courses.
+Dialogue: 0,0:00:04.10,0:00:04.46,English,,0,0,0,,{\1c&H0071D2F0&}You {\1c&H0071D2F0&}can {\1c&H0071D2F0&}learn {\1c&H0071D2F0&}from {\1c&H0057ADFF&}short {\1c&H00FFFFFF&}clips,\N{\1c&H00FFFFFF&}interviews {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}long {\1c&H00FFFFFF&}courses.
+Dialogue: 0,0:00:04.46,0:00:05.12,English,,0,0,0,,{\1c&H0071D2F0&}You {\1c&H0071D2F0&}can {\1c&H0071D2F0&}learn {\1c&H0071D2F0&}from {\1c&H0071D2F0&}short {\1c&H0057ADFF&}clips,\N{\1c&H00FFFFFF&}interviews {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}long {\1c&H00FFFFFF&}courses.
+Dialogue: 0,0:00:05.12,0:00:05.70,English,,0,0,0,,{\1c&H0071D2F0&}You {\1c&H0071D2F0&}can {\1c&H0071D2F0&}learn {\1c&H0071D2F0&}from {\1c&H0071D2F0&}short {\1c&H0071D2F0&}clips,\N{\1c&H0057ADFF&}interviews {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}long {\1c&H00FFFFFF&}courses.
+Dialogue: 0,0:00:05.70,0:00:06.10,English,,0,0,0,,{\1c&H0071D2F0&}You {\1c&H0071D2F0&}can {\1c&H0071D2F0&}learn {\1c&H0071D2F0&}from {\1c&H0071D2F0&}short {\1c&H0071D2F0&}clips,\N{\1c&H0071D2F0&}interviews {\1c&H0057ADFF&}and {\1c&H00FFFFFF&}long {\1c&H00FFFFFF&}courses.
+Dialogue: 0,0:00:06.10,0:00:06.36,English,,0,0,0,,{\1c&H0071D2F0&}You {\1c&H0071D2F0&}can {\1c&H0071D2F0&}learn {\1c&H0071D2F0&}from {\1c&H0071D2F0&}short {\1c&H0071D2F0&}clips,\N{\1c&H0071D2F0&}interviews {\1c&H0071D2F0&}and {\1c&H00FFFFFF&}long {\1c&H00FFFFFF&}courses.
+Dialogue: 0,0:00:06.36,0:00:06.46,English,,0,0,0,,{\1c&H0071D2F0&}You {\1c&H0071D2F0&}can {\1c&H0071D2F0&}learn {\1c&H0071D2F0&}from {\1c&H0071D2F0&}short {\1c&H0071D2F0&}clips,\N{\1c&H0071D2F0&}interviews {\1c&H0071D2F0&}and {\1c&H0057ADFF&}long {\1c&H00FFFFFF&}courses.
+Dialogue: 0,0:00:06.46,0:00:06.72,English,,0,0,0,,{\1c&H0071D2F0&}You {\1c&H0071D2F0&}can {\1c&H0071D2F0&}learn {\1c&H0071D2F0&}from {\1c&H0071D2F0&}short {\1c&H0071D2F0&}clips,\N{\1c&H0071D2F0&}interviews {\1c&H0071D2F0&}and {\1c&H0071D2F0&}long {\1c&H0057ADFF&}courses.
+Dialogue: 0,0:00:06.72,0:00:08.04,English,,0,0,0,,{\1c&H0071D2F0&}You {\1c&H0071D2F0&}can {\1c&H0071D2F0&}learn {\1c&H0071D2F0&}from {\1c&H0071D2F0&}short {\1c&H0071D2F0&}clips,\N{\1c&H0071D2F0&}interviews {\1c&H0071D2F0&}and {\1c&H0071D2F0&}long {\1c&H0071D2F0&}courses.
+Dialogue: 1,0:00:02.70,0:00:08.04,Chinese,,0,0,0,,你可以从短片段、访谈和长课程中学习。
+Dialogue: 0,0:00:08.04,0:00:08.34,English,,0,0,0,,{\1c&H0057ADFF&}Listen {\1c&H00FFFFFF&}to {\1c&H00FFFFFF&}one {\1c&H00FFFFFF&}sentence,\N{\1c&H00FFFFFF&}notice {\1c&H00FFFFFF&}useful {\1c&H00FFFFFF&}expressions, {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}then {\1c&H00FFFFFF&}play {\1c&H00FFFFFF&}it {\1c&H00FFFFFF&}again.
+Dialogue: 0,0:00:08.34,0:00:08.54,English,,0,0,0,,{\1c&H0071D2F0&}Listen {\1c&H0057ADFF&}to {\1c&H00FFFFFF&}one {\1c&H00FFFFFF&}sentence,\N{\1c&H00FFFFFF&}notice {\1c&H00FFFFFF&}useful {\1c&H00FFFFFF&}expressions, {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}then {\1c&H00FFFFFF&}play {\1c&H00FFFFFF&}it {\1c&H00FFFFFF&}again.
+Dialogue: 0,0:00:08.54,0:00:08.80,English,,0,0,0,,{\1c&H0071D2F0&}Listen {\1c&H0071D2F0&}to {\1c&H0057ADFF&}one {\1c&H00FFFFFF&}sentence,\N{\1c&H00FFFFFF&}notice {\1c&H00FFFFFF&}useful {\1c&H00FFFFFF&}expressions, {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}then {\1c&H00FFFFFF&}play {\1c&H00FFFFFF&}it {\1c&H00FFFFFF&}again.
+Dialogue: 0,0:00:08.80,0:00:09.90,English,,0,0,0,,{\1c&H0071D2F0&}Listen {\1c&H0071D2F0&}to {\1c&H0071D2F0&}one {\1c&H0057ADFF&}sentence,\N{\1c&H00FFFFFF&}notice {\1c&H00FFFFFF&}useful {\1c&H00FFFFFF&}expressions, {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}then {\1c&H00FFFFFF&}play {\1c&H00FFFFFF&}it {\1c&H00FFFFFF&}again.
+Dialogue: 0,0:00:09.90,0:00:10.20,English,,0,0,0,,{\1c&H0071D2F0&}Listen {\1c&H0071D2F0&}to {\1c&H0071D2F0&}one {\1c&H0071D2F0&}sentence,\N{\1c&H0057ADFF&}notice {\1c&H00FFFFFF&}useful {\1c&H00FFFFFF&}expressions, {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}then {\1c&H00FFFFFF&}play {\1c&H00FFFFFF&}it {\1c&H00FFFFFF&}again.
+Dialogue: 0,0:00:10.20,0:00:10.66,English,,0,0,0,,{\1c&H0071D2F0&}Listen {\1c&H0071D2F0&}to {\1c&H0071D2F0&}one {\1c&H0071D2F0&}sentence,\N{\1c&H0071D2F0&}notice {\1c&H0057ADFF&}useful {\1c&H00FFFFFF&}expressions, {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}then {\1c&H00FFFFFF&}play {\1c&H00FFFFFF&}it {\1c&H00FFFFFF&}again.
+Dialogue: 0,0:00:10.66,0:00:11.94,English,,0,0,0,,{\1c&H0071D2F0&}Listen {\1c&H0071D2F0&}to {\1c&H0071D2F0&}one {\1c&H0071D2F0&}sentence,\N{\1c&H0071D2F0&}notice {\1c&H0071D2F0&}useful {\1c&H0057ADFF&}expressions, {\1c&H00FFFFFF&}and {\1c&H00FFFFFF&}then {\1c&H00FFFFFF&}play {\1c&H00FFFFFF&}it {\1c&H00FFFFFF&}again.
+Dialogue: 0,0:00:11.94,0:00:12.08,English,,0,0,0,,{\1c&H0071D2F0&}Listen {\1c&H0071D2F0&}to {\1c&H0071D2F0&}one {\1c&H0071D2F0&}sentence,\N{\1c&H0071D2F0&}notice {\1c&H0071D2F0&}useful {\1c&H0071D2F0&}expressions, {\1c&H0057ADFF&}and {\1c&H00FFFFFF&}then {\1c&H00FFFFFF&}play {\1c&H00FFFFFF&}it {\1c&H00FFFFFF&}again.
+Dialogue: 0,0:00:12.08,0:00:12.30,English,,0,0,0,,{\1c&H0071D2F0&}Listen {\1c&H0071D2F0&}to {\1c&H0071D2F0&}one {\1c&H0071D2F0&}sentence,\N{\1c&H0071D2F0&}notice {\1c&H0071D2F0&}useful {\1c&H0071D2F0&}expressions, {\1c&H0071D2F0&}and {\1c&H0057ADFF&}then {\1c&H00FFFFFF&}play {\1c&H00FFFFFF&}it {\1c&H00FFFFFF&}again.
+Dialogue: 0,0:00:12.30,0:00:12.58,English,,0,0,0,,{\1c&H0071D2F0&}Listen {\1c&H0071D2F0&}to {\1c&H0071D2F0&}one {\1c&H0071D2F0&}sentence,\N{\1c&H0071D2F0&}notice {\1c&H0071D2F0&}useful {\1c&H0071D2F0&}expressions, {\1c&H0071D2F0&}and {\1c&H0071D2F0&}then {\1c&H0057ADFF&}play {\1c&H00FFFFFF&}it {\1c&H00FFFFFF&}again.
+Dialogue: 0,0:00:12.58,0:00:12.82,English,,0,0,0,,{\1c&H0071D2F0&}Listen {\1c&H0071D2F0&}to {\1c&H0071D2F0&}one {\1c&H0071D2F0&}sentence,\N{\1c&H0071D2F0&}notice {\1c&H0071D2F0&}useful {\1c&H0071D2F0&}expressions, {\1c&H0071D2F0&}and {\1c&H0071D2F0&}then {\1c&H0071D2F0&}play {\1c&H0057ADFF&}it {\1c&H00FFFFFF&}again.
+Dialogue: 0,0:00:12.82,0:00:13.16,English,,0,0,0,,{\1c&H0071D2F0&}Listen {\1c&H0071D2F0&}to {\1c&H0071D2F0&}one {\1c&H0071D2F0&}sentence,\N{\1c&H0071D2F0&}notice {\1c&H0071D2F0&}useful {\1c&H0071D2F0&}expressions, {\1c&H0071D2F0&}and {\1c&H0071D2F0&}then {\1c&H0071D2F0&}play {\1c&H0071D2F0&}it {\1c&H0057ADFF&}again.
+Dialogue: 0,0:00:13.16,0:00:14.38,English,,0,0,0,,{\1c&H0071D2F0&}Listen {\1c&H0071D2F0&}to {\1c&H0071D2F0&}one {\1c&H0071D2F0&}sentence,\N{\1c&H0071D2F0&}notice {\1c&H0071D2F0&}useful {\1c&H0071D2F0&}expressions, {\1c&H0071D2F0&}and {\1c&H0071D2F0&}then {\1c&H0071D2F0&}play {\1c&H0071D2F0&}it {\1c&H0071D2F0&}again.
+Dialogue: 1,0:00:08.04,0:00:14.38,Chinese,,0,0,0,,听一个句子，注意有用的表达，然后再播放一遍。
+Dialogue: 0,0:00:14.38,0:00:14.64,English,,0,0,0,,{\1c&H0057ADFF&}Small {\1c&H00FFFFFF&}steps {\1c&H00FFFFFF&}can {\1c&H00FFFFFF&}make {\1c&H00FFFFFF&}a {\1c&H00FFFFFF&}real {\1c&H00FFFFFF&}difference.
+Dialogue: 0,0:00:14.64,0:00:15.02,English,,0,0,0,,{\1c&H0071D2F0&}Small {\1c&H0057ADFF&}steps {\1c&H00FFFFFF&}can {\1c&H00FFFFFF&}make {\1c&H00FFFFFF&}a {\1c&H00FFFFFF&}real {\1c&H00FFFFFF&}difference.
+Dialogue: 0,0:00:15.02,0:00:15.10,English,,0,0,0,,{\1c&H0071D2F0&}Small {\1c&H0071D2F0&}steps {\1c&H00FFFFFF&}can {\1c&H00FFFFFF&}make {\1c&H00FFFFFF&}a {\1c&H00FFFFFF&}real {\1c&H00FFFFFF&}difference.
+Dialogue: 0,0:00:15.10,0:00:15.24,English,,0,0,0,,{\1c&H0071D2F0&}Small {\1c&H0071D2F0&}steps {\1c&H0057ADFF&}can {\1c&H00FFFFFF&}make {\1c&H00FFFFFF&}a {\1c&H00FFFFFF&}real {\1c&H00FFFFFF&}difference.
+Dialogue: 0,0:00:15.24,0:00:15.50,English,,0,0,0,,{\1c&H0071D2F0&}Small {\1c&H0071D2F0&}steps {\1c&H0071D2F0&}can {\1c&H0057ADFF&}make {\1c&H00FFFFFF&}a {\1c&H00FFFFFF&}real {\1c&H00FFFFFF&}difference.
+Dialogue: 0,0:00:15.50,0:00:15.66,English,,0,0,0,,{\1c&H0071D2F0&}Small {\1c&H0071D2F0&}steps {\1c&H0071D2F0&}can {\1c&H0071D2F0&}make {\1c&H0057ADFF&}a {\1c&H00FFFFFF&}real {\1c&H00FFFFFF&}difference.
+Dialogue: 0,0:00:15.66,0:00:15.86,English,,0,0,0,,{\1c&H0071D2F0&}Small {\1c&H0071D2F0&}steps {\1c&H0071D2F0&}can {\1c&H0071D2F0&}make {\1c&H0071D2F0&}a {\1c&H0057ADFF&}real {\1c&H00FFFFFF&}difference.
+Dialogue: 0,0:00:15.86,0:00:16.32,English,,0,0,0,,{\1c&H0071D2F0&}Small {\1c&H0071D2F0&}steps {\1c&H0071D2F0&}can {\1c&H0071D2F0&}make {\1c&H0071D2F0&}a {\1c&H0071D2F0&}real {\1c&H0057ADFF&}difference.
+Dialogue: 0,0:00:16.32,0:00:17.52,English,,0,0,0,,{\1c&H0071D2F0&}Small {\1c&H0071D2F0&}steps {\1c&H0071D2F0&}can {\1c&H0071D2F0&}make {\1c&H0071D2F0&}a {\1c&H0071D2F0&}real {\1c&H0071D2F0&}difference.
+Dialogue: 1,0:00:14.38,0:00:17.52,Chinese,,0,0,0,,小步前进也能带来真正的改变。
