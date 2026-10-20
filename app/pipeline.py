@@ -602,7 +602,16 @@ def make_notes(package: dict) -> str:
     from .privacy import public_source_url
     episode = package["episode"]
     source_url = public_source_url(episode.get("source_url", ""))
-    rows = [f"# {episode.get('title_zh') or episode['title']}", "", f"- 原题：{episode['title']}", f"- 来源：{source_url}", f"- 时长：{int(episode['duration_s']//60)} 分 {round(episode['duration_s']%60)} 秒", "", "## 逐句精读", ""]
+    rows = [f"# {episode.get('title_zh') or episode['title']}", "", f"- 原题：{episode['title']}", f"- 来源：{source_url}", f"- 时长：{int(episode['duration_s']//60)} 分 {round(episode['duration_s']%60)} 秒", ""]
+    sections = package.get('study_sections', {}).get('items', [])
+    if sections:
+        rows.extend(['## 整课主题目录', ''])
+        for section in sections:
+            start, end = section['start_ms'], section['end_ms']
+            span = f'{int(start//60000):02}:{int(start//1000)%60:02}–{int(end//60000):02}:{int(end//1000)%60:02}'
+            rows.extend([f"- [{span} · {section['title']}](study.html?t={start/1000:.3f})：{section['summary']}"])
+        rows.append('')
+    rows.extend(['## 逐句精读', ''])
     words = {word["id"]: word for word in package["words"]}
     cards = {card["id"]: card for card in package["cards"]}
     for sentence in package["sentences"]:

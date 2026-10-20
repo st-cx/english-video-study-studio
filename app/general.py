@@ -305,6 +305,8 @@ def _merge_chapter(package,part,chapter):
 def _write_bundle(package,folder,progress):
     original_package=package
     package=copy.deepcopy(package)
+    from .study_sections import ensure_study_sections
+    ensure_study_sections(package,folder,progress)
     from .pipeline import make_notes
     from .subtitles import make_captions
     from .study_page import write_study_page

@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+const built=await build({entryPoints:['src/studyNavigation.ts'],bundle:true,platform:'node',format:'esm',write:false});
+const {followOffset,episodeStudySections}=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
+assert.equal(followOffset(200,400,250,80,2000),200,'visible rows stay still');
+assert.equal(followOffset(0,400,1800,100,2000),1600,'near-end target is clamped');
+assert.equal(followOffset(500,400,100,800,2000),86,'tall sentence starts remain readable');
+assert.equal(followOffset(300,400,0,100,2000),0,'rewind can return to the first row');
+const episode={episode:{duration_s:100},chapters:[{id:'a',title:'Old 1',start_ms:0,end_ms:50000,status:'ready'},{id:'b',title:'Old 2',start_ms:50000,end_ms:100000,status:'review'}]};
+assert.deepEqual(episodeStudySections(episode).map(c=>c.id),['a','b']);
+episode.study_sections={status:'ready',items:[{id:'topic-one',title:'Course aims',summary:'Aims and study habits',start_ms:0,end_ms:30000},{id:'topic-two',title:'Expressions',summary:'Combining values',start_ms:30000,end_ms:100000}]};
+assert.deepEqual(episodeStudySections(episode).map(c=>[c.id,c.status]),[['topic-one','ready'],['topic-two','review']]);
+assert.equal(episode.chapters[1].status,'review','navigation never approves processing chapters');
+assert.equal(episodeStudySections(episode)[1].summary,'Combining values');
+console.log(JSON.stringify({status:'passed',checks:8,source_chapters_unchanged:true}));
