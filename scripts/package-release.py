@@ -26,11 +26,13 @@ def main():
     for p in files:
         if any(x.lower() in privacy.FORBIDDEN for x in p.relative_to(ROOT).parts):raise RuntimeError('发布清单包含私有资料目录。')
     entries=[{'path':p.relative_to(ROOT).as_posix(),'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in files]
+    version=json.loads((ROOT/'package.json').read_text(encoding='utf-8'))['version']
+    if not __import__('re').fullmatch(r'\d+\.\d+\.\d+',version):raise RuntimeError('版本号格式无效。')
     out=ROOT/'outputs';out.mkdir(exist_ok=True)
-    final=out/'英语视频精读精听工作室_v0.4.zip';temporary=final.with_suffix('.zip.part')
+    final=out/f'english-video-study-studio-v{version}.zip';temporary=final.with_suffix('.zip.part')
     with ZipFile(temporary,'w',ZIP_DEFLATED,compresslevel=6) as z:
         for p in files:z.write(p,p.relative_to(ROOT).as_posix())
-        z.writestr('RELEASE-MANIFEST.json',json.dumps({'version':'0.4.0','commit':commit,'files':entries},ensure_ascii=False,indent=2))
+        z.writestr('RELEASE-MANIFEST.json',json.dumps({'version':version,'commit':commit,'files':entries},ensure_ascii=False,indent=2))
     with ZipFile(temporary) as z:
         assert z.testzip() is None
         for e in entries:assert hashlib.sha256(z.read(e['path'])).hexdigest()==e['sha256']

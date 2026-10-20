@@ -26,7 +26,7 @@ from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlsplit, urluns
 
 from .media import file_sha256, media_duration, probe_media, run_ffmpeg
 
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) EnglishVideoStudy/0.4"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) EnglishVideoStudy/0.5"
 HEADERS = {"User-Agent": USER_AGENT, "Accept-Encoding": "identity"}
 MAX_MEDIA_BYTES = 12 * 1024 * 1024 * 1024
 BBC_PAGE_HOSTS = {"www.bbc.co.uk", "bbc.co.uk", "www.bbc.com", "bbc.com"}

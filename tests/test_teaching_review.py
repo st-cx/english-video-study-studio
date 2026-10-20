@@ -123,6 +123,17 @@ class TeachingReviewTests(unittest.TestCase):
         self.assertEqual(review['issues'][0]['targets'][0]['id'], 'w1')
         self.assertEqual(len(review['corrections']), 3)
 
+    def test_schema_repair_is_rechecked_and_invalid_changes_never_apply(self):
+        data=package()
+        bad={'ok':True,'issues':[],'corrections':[{'type':'sentence','id':'s1','field':'translation','value':123}]}
+        repaired={'ok':True,'issues':[],'corrections':[{'type':'sentence','id':'s1','field':'translation','value':'你打算试试吗？'}]}
+        with patch('app.teaching_review.ask_deepseek',side_effect=[bad,repaired]) as ask:
+            review_teaching(data,lambda *a:None)
+        self.assertEqual(ask.call_count,2)
+        self.assertEqual(data['teaching_review']['status'],'passed')
+        self.assertEqual(data['sentences'][0]['translation'],'你打算试试吗？')
+        self.assertEqual(data['teaching_review']['corrections'],[])
+
     def test_retry_keeps_real_correction_history_and_removes_old_noops(self):
         data = package()
         change = {'type': 'word', 'id': 'w1', 'field': 'gloss_zh',

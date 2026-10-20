@@ -1,4 +1,4 @@
-# v0.4 实施约定
+# v0.5 实施约定
 
 - 所有实施只修改 universal-studio。旧工程和旧计划任务保持原状。
 - 原素材 -> 归一媒体 -> ASR/对齐 -> version 4 EpisodePackage -> 教学/布局 -> 学习页/按需视频。
@@ -16,3 +16,13 @@
 - 发布目录只包含源码/说明/合成演示，排除 work,outputs真实素材,密钥,数据库,日志,个人路径；MIT覆盖自己的源码，第三方媒体不随源码发布。开源仓库由root发布。
 
 文件所有权：root= pipeline/alignment/providers/storage/renderer/study_page/package/install/docs/发布；media agent=app/media.py,app/sources.py,app/subtitle_input.py及对应tests；server agent=app/server.py及对应tests；frontend agent=全部src和scripts/*.mjs及前端测试。公共约定变化需回报root。
+
+## 原声证据与长课修订
+
+- 大模型优先选择本机完整缓存，GPU使用int8_float16；CPU回退必须记录真实模型与计算类型，缓存指纹不得冒称GPU大模型。ASR与stable对齐共享一个模型，完成后释放再进入独立CTC。
+- speech_chunks里的所有word、whisper_segment和alignment诊断统一到整片时间；clip局部word_index不用于全片索引算术，争议按文字与实测时段唯一匹配。
+- 全片参考稿只比较一次，按实测时段分配争议；跨章cue作为上下文，不能重复计算整句漏词。
+- reference_resolution是自动参考门禁：绑定当前原声、模型、争议和候选证据。精确text/time指纹不受ID、中文词义等教学元数据影响；英文或时间变动会使旧证据失效。
+- CTC修复只接受双窗稳定且邻词联合兼容的实测跨度；低分、重复和未确认读法保持检查。真实变更保留原始诊断和证据，不通过approved布尔清旗。
+- 并行排版使用独立临时文件；可选讲解建议无法定位原句时有界修复后省略并记录。必需词义/翻译补齐失败仍暂停；教学复核格式错误可修复，往返改写仍待检查。
+- sync_audit分别记录自动声学对照与人工听辨；程序不能代填已听辨声明。课程原音、运行配置和验收包仅存本机，不进入公开发布。

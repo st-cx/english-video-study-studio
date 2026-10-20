@@ -38,6 +38,8 @@ def _local_whisper_path() -> str:
 
 
 def transcribe_words(audio_path: Path, progress: Progress) -> tuple[list[dict], float, str]:
+    from .speech_runtime import configure_cuda_runtime
+    configure_cuda_runtime()
     try:
         from faster_whisper import WhisperModel
     except ImportError as exc:
@@ -117,6 +119,8 @@ def _build_sentences(words: list[dict]) -> tuple[list[dict], list[dict]]:
             wid = f"w{len(all_words):05d}"
             ids.append(wid)
             all_words.append({"id": wid, "sentence_id": sentence_id, "index": wi, "text": word["text"], "start_ms": word["start_ms"], "end_ms": word["end_ms"], "gloss_zh": "", "probability": word["probability"]})
+            for field in ('connected_words','spoken_form','timing_unit','phrase_unit','spoken_words','original_zero_diagnostics','timing_evidence'):
+                if field in word:all_words[-1][field]=word[field]
         text = " ".join(word["text"] for word in group)
         text = re.sub(r"\s+([,.!?;:])", r"\1", text)
         sentences.append({"id": sentence_id, "start_ms": group[0]["start_ms"], "end_ms": group[-1]["end_ms"], "text": text, "translation": "", "speaker": group[0].get('speaker', ''), "word_ids": ids, "card_ids": []})
@@ -135,6 +139,8 @@ def _annotate(package: dict, raw_transcript: str, progress: Progress, cache_dir:
         if isinstance(value, list): return [simplify(v) for v in value]
         return converter.convert(value) if isinstance(value, str) else value
     sentences, words = package["sentences"], package["words"]
+    context_sentences=package.get('_annotation_context',sentences)
+    context_positions={s['id']:i for i,s in enumerate(context_sentences)}
     for sentence in sentences:
         sentence['card_ids'] = []
     word_by_id = {word["id"]: word for word in words}
@@ -144,7 +150,7 @@ def _annotate(package: dict, raw_transcript: str, progress: Progress, cache_dir:
     system = (
         "你是英语视频的双语精读编辑，服务中国四级入门学习者。所有中文必须使用简体中文。只依据输入的英文句子和可靠参考词汇编写，"
         "不虚构事实或错误标记词性。自然、准确地翻译每句；重点解释固定搭配、习语和有学习价值的词，"
-        "不定式to、关系代词that/who、宾语从句that须按语法作用解释，不机械译为去、那、谁。副词不决定动词必须用原形；means doing中的doing是动名词短语。人名与术语在整期保持一致，未核实的中文书名保留英文。"
+        "不定式to、关系代词that/who、宾语从句that须按语法作用解释，不机械译为去、那、谁。副词不决定动词必须用原形；means doing中的doing是动名词短语；be+过去分词构成被动时be是助动词。编程口述中的type of不能教成Python代码，须按上下文区分type()函数与自然语言of；公式口述保留运算顺序与括号。口头截断和重启不构成技术定义，不能编造命题。人名与术语在整期保持一致，未核实的中文书名保留英文。"
         "每个输入词都必须给出本句语境里的简短中文义，包括功能词、助动词和专名，每条通常不超过24字；不能用‘结合上下文理解’等占位句。"
         "每句只把1到3个值得记忆的实词标为focus:true，其他词为false；功能词和人名照常给义但不要挤进重点词表。"
         "固定短语和常用搭配另放入 phrases，必须关联同一句中连续的2到8个词语ID，解释整体语境义，不拆开解释。"
@@ -169,7 +175,7 @@ def _annotate(package: dict, raw_transcript: str, progress: Progress, cache_dir:
     for batch_index, batch in enumerate(batches):
         ids = {sentence["id"] for sentence in batch}
         batch_words = [word for word in words if word["sentence_id"] in ids]
-        payload = {"episode_title": package["episode"]["title"], "official_vocabulary": source_vocab, "context_before": [s['text'] for s in sentences[max(0,sentences.index(batch[0])-2):sentences.index(batch[0])]], "context_after": [s['text'] for s in sentences[sentences.index(batch[-1])+1:sentences.index(batch[-1])+3]], "sentences": [{"id": s["id"], "english": s["text"], "focus_word_ids": [wid for wid in s["word_ids"] if len(re.sub(r"[^A-Za-z]", "", word_by_id[wid]["text"])) >= 4][:5], "words": [{"id": word_by_id[wid]["id"], "text": word_by_id[wid]["text"]} for wid in s["word_ids"]]} for s in batch]}
+        payload = {"episode_title": package["episode"]["title"], "official_vocabulary": source_vocab, "context_before": [s['text'] for s in context_sentences[max(0,context_positions[batch[0]['id']]-2):context_positions[batch[0]['id']]]], "context_after": [s['text'] for s in context_sentences[context_positions[batch[-1]['id']]+1:context_positions[batch[-1]['id']]+3]], "sentences": [{"id": s["id"], "english": s["text"], "focus_word_ids": [wid for wid in s["word_ids"] if len(re.sub(r"[^A-Za-z]", "", word_by_id[wid]["text"])) >= 4][:5], "words": [{"id": word_by_id[wid]["id"], "text": word_by_id[wid]["text"]} for wid in s["word_ids"]]} for s in batch]}
         progress("teaching", 78 + int(batch_index / max(1, len(batches)) * 13), f"正在编写双语讲解 {batch_index + 1} / {len(batches)}")
         try:
             result = simplify(ask_deepseek(system, json.dumps(payload, ensure_ascii=False), max_tokens=8192, cache_dir=cache_dir))
@@ -201,6 +207,8 @@ def _annotate(package: dict, raw_transcript: str, progress: Progress, cache_dir:
                     if len({w['sentence_id'] for w in linked})!=1 or any(b['index']!=a['index']+1 for a,b in zip(linked,linked[1:])):
                         return 'phrases 必须引用同一句中连续的所有词语 ID，不能跳过中间词；错误词组为'+json.dumps(phrase,ensure_ascii=False)+'。不能连续解释的搭配放在cards，删除该phrase。'
                 for card in candidate.get('cards',[]):
+                    if not isinstance(card.get('title'),str) or not card['title'].strip():
+                        return 'cards中的可选讲解卡须有非空title；不能给出可靠标题时请删除该card，不得编造。'
                     linked=[s for s in batch if s['id'] in card.get('sentence_ids',[])]
                     example=card.get('example','')
                     if not linked or not isinstance(example,str) or example and example.lower() not in ' '.join(s['text'] for s in linked).lower():
@@ -224,6 +232,13 @@ def _annotate(package: dict, raw_transcript: str, progress: Progress, cache_dir:
                             package.setdefault('processing',{}).setdefault('omitted_phrase_suggestions',[]).append({'candidate':phrase,'reason':reason})
                         else:valid_phrases.append(phrase)
                     result['phrases']=valid_phrases
+                    valid_cards=[]
+                    for card in result.get('cards',[]):
+                        reason=validate({'phrases':[],'cards':[card]})
+                        if reason:
+                            package.setdefault('processing',{}).setdefault('omitted_card_suggestions',[]).append({'candidate':card,'reason':reason})
+                        else:valid_cards.append(card)
+                    result['cards']=valid_cards
                     if validate(result):raise ProviderError('教学数据自动修复后仍不满足关联和长度规则：'+validate(result))
                 package.setdefault('processing',{}).setdefault('teaching_format_repairs',[]).append({'batch':batch_index+1,'reason':problem})
             if not package["episode"].get("title_zh") and isinstance(result.get("title_zh"), str):
@@ -283,22 +298,33 @@ def _annotate(package: dict, raw_transcript: str, progress: Progress, cache_dir:
                 all_cards.append(card)
                 for sentence in linked:
                     sentence["card_ids"].append(card["id"])
-            missing_words = [w for w in batch_words if not w["gloss_zh"]]
-            if missing_words:
-                repair = simplify(ask_deepseek("只输出 JSON。使用简体中文补齐每个指定词语的本句语境义（24字以内），包括功能词。返回 {glosses:[{word_id,zh}]}，不得返回占位提示。", json.dumps({"sentences": payload["sentences"], "missing_word_ids": [w["id"] for w in missing_words]}, ensure_ascii=False), max_tokens=8192, cache_dir=cache_dir))
-                for item in repair.get("glosses", []):
-                    target = word_by_id.get(item.get("word_id"))
-                    if target and target["sentence_id"] in ids and isinstance(item.get("zh"), str):
-                        target["gloss_zh"] = item["zh"].strip()
-            if any(not w["gloss_zh"] or len(w["gloss_zh"]) > 70 for w in batch_words):
-                raise ProviderError("当前词义仍有缺漏或过长内容，已暂停，避免成片出现占位提示。")
+            for repair_attempt in range(3):
+                invalid_words=[w for w in batch_words if not w['gloss_zh'] or len(w['gloss_zh'])>70]
+                if not invalid_words:break
+                repair=simplify(ask_deepseek(
+                    '只输出JSON object。为每个指定word_id补齐或精简本句语境义，所有中文简体，通常24字以内；功能词说明语法作用。严格返回 {"glosses":[{"word_id":"输入中的word_id","zh":"实际中文义"}]}，不要返回id或word_ids，不得占位。',
+                    json.dumps({'sentences':payload['sentences'],'required_words':[{'word_id':w['id'],'text':w['text'],'previous':w['gloss_zh']} for w in invalid_words],'repair_attempt':repair_attempt+1},ensure_ascii=False),
+                    max_tokens=8192,cache_dir=cache_dir))
+                requested={w['id'] for w in invalid_words}
+                for item in repair.get('glosses',[]):
+                    target=word_by_id.get(item.get('word_id'))
+                    if target and target['id'] in requested and isinstance(item.get('zh'),str):
+                        target['gloss_zh']=item['zh'].strip()
+            if any(not w['gloss_zh'] or len(w['gloss_zh'])>70 for w in batch_words):
+                raise ProviderError('当前词义多次补齐后仍有缺漏或过长内容，已暂停，避免成片出现占位提示。')
         except ProviderError:
             raise
         except Exception as exc:
             raise ProviderError(f"教学内容生成失败（第 {batch_index + 1} 组）：{str(exc)[:300]}") from exc
-    missing = sum(not sentence["translation"] for sentence in sentences)
-    if missing:
-        raise ProviderError(f"有 {missing} 句没有生成中文翻译，已暂停以免输出不完整的学习材料。")
+    for attempt in range(2):
+        missing=[s for s in sentences if not s['translation']]
+        if not missing:break
+        repaired=simplify(ask_deepseek('只输出JSON object，使用简体中文补齐各句自然译文，必须使用输入id。返回 {"translations":[{"id":"原id","zh":"译文"}]}。口语片段根据上下文理解，不凭空补事实。',json.dumps({'missing_sentences':[{'id':s['id'],'english':s['text']} for s in missing],'attempt':attempt+1},ensure_ascii=False),max_tokens=8192,cache_dir=cache_dir))
+        required={s['id']:s for s in missing}
+        for item in repaired.get('translations',[]):
+            if item.get('id') in required and isinstance(item.get('zh'),str):required[item['id']]['translation']=item['zh'].strip()
+    missing=sum(not sentence['translation'] for sentence in sentences)
+    if missing:raise ProviderError(f'有 {missing} 句多次补齐后仍没有中文翻译，已暂停以免输出不完整材料。')
     package["phrases"] = all_phrases
     # Persist display intervals: cards too close together remain in notes only.
     display_cards = []
@@ -573,8 +599,10 @@ def _realign_corrected(package: dict, audio_path: Path, corrected: str, progress
 
 
 def make_notes(package: dict) -> str:
+    from .privacy import public_source_url
     episode = package["episode"]
-    rows = [f"# {episode.get('title_zh') or episode['title']}", "", f"- 原题：{episode['title']}", f"- 来源：{episode['source_url']}", f"- 时长：{int(episode['duration_s']//60)} 分 {round(episode['duration_s']%60)} 秒", "", "## 逐句精读", ""]
+    source_url = public_source_url(episode.get("source_url", ""))
+    rows = [f"# {episode.get('title_zh') or episode['title']}", "", f"- 原题：{episode['title']}", f"- 来源：{source_url}", f"- 时长：{int(episode['duration_s']//60)} 分 {round(episode['duration_s']%60)} 秒", "", "## 逐句精读", ""]
     words = {word["id"]: word for word in package["words"]}
     cards = {card["id"]: card for card in package["cards"]}
     for sentence in package["sentences"]:

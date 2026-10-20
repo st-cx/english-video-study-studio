@@ -89,6 +89,40 @@ class ReferenceCheckTests(unittest.TestCase):
         self.assertEqual(len(edits), 1)
         self.assertEqual(reference_issues(normalized, '50,000 people.'), [])
 
+    def test_ok_is_an_acknowledgement_not_a_proper_name(self):
+        self.assertEqual(reference_issues(words('OK so we can begin.'), 'We can begin.'), [])
+        self.assertEqual(reference_issues(words('We can begin.'), 'OK, we can begin.'), [])
+        self.assertTrue(reference_issues(words('It is from US.'), 'It is from UK.'))
+
+    def test_leading_decimal_is_not_misread_as_an_integer(self):
+        for spoken in ('0.01', '0 .01', 'zero point zero one'):
+            self.assertEqual(reference_issues(words(f'Within {spoken} is enough.'), 'Within .01 is enough.'), [])
+        self.assertTrue(reference_issues(words('Within 0 .0001 is enough.'), 'Within .001 is enough.'))
+        self.assertTrue(reference_issues(words('Pi is 3 .159.'), 'Pi is 3.14159.'))
+
+    def test_spoken_separator_matches_an_explicit_code_identifier(self):
+        self.assertEqual(reference_issues(words('I say random dot rand int.'), 'I say random.randint.'), [])
+        self.assertEqual(reference_issues(words('Save pi underscore approx.'), 'Save pi_approx.'), [])
+        self.assertTrue(reference_issues(words('I say random dot rand int.'), 'I say random.randrange.'))
+        self.assertTrue(reference_issues(words('Save pi underscore of prox.'), 'Save pi_approx.'))
+        self.assertTrue(reference_issues(words('Place a dot here.'), 'Place here.'))
+
+
+
+
+    def test_toward_towards_is_accepted_but_direction_changes_are_not(self):
+        self.assertEqual(reference_issues(words('Move towards the screen.'), 'Move toward the screen.'), [])
+        self.assertTrue(reference_issues(words('Move towards the screen.'), 'Move away from the screen.'))
+
+    def test_s_expands_only_when_explicit_reference_has_the_same_noun_is(self):
+        self.assertEqual(reference_issues(words("Division's applied to integers."), 'Division is applied to integers.'), [])
+        self.assertTrue(reference_issues(words("Division's applied to integers."), 'Division has applied to integers.'))
+        self.assertTrue(reference_issues(words("Alice's book is here."), 'Alice is here.'))
+
+    def test_psets_spacing_matches_exact_spelling_without_hiding_plural_changes(self):
+        self.assertEqual(reference_issues(words('The p sets are useful.'), 'The psets are useful.'), [])
+        self.assertTrue(reference_issues(words('The p set is useful.'), 'The psets are useful.'))
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

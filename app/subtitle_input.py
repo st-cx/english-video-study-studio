@@ -21,6 +21,25 @@ _STAGE_LABEL = re.compile(
     r"(?:\s*(?:and|,|/|&|\+)\s*(?:music|laughter|applause|clapping|cheering))*[.!…]*",
     re.I,
 )
+_SPEAKER_PREFIX = re.compile(r"^\s*(?P<speaker>(?:[A-Z][A-Z'’\-]+(?:\s+[A-Z][A-Z'’\-]+){1,3}|STUDENT|AUDIENCE|INSTRUCTOR|LECTURER|NARRATOR|TEACHER|SPEAKER(?:\s+\d+)?)):\s*")
+
+
+def _speaker_metadata(lines: list[str]) -> tuple[list[str], str]:
+    """Remove explicit timed-caption labels while retaining their attribution."""
+    result = list(lines)
+    speaker = ''
+    for index, line in enumerate(result):
+        if not line.strip():
+            continue
+        voice = re.search(r'<v(?:\.[\w.-]+)?\s+([^>]+)>', line, re.I)
+        if voice:
+            speaker = html.unescape(voice[1]).strip()
+        label = _SPEAKER_PREFIX.match(line)
+        if label:
+            speaker = label['speaker']
+            result[index] = line[label.end():]
+        break
+    return result, speaker
 
 
 def _remove_stage_notes(value: str) -> str:
@@ -129,7 +148,11 @@ def _timed_text(text: str, *, rolling: bool = False) -> list[dict]:
                 break
             body.append(lines[cursor])
             cursor += 1
-        cues.append({"start_ms": start, "end_ms": end, "text": _join_rolling_lines(body, rolling=rolling)})
+        body, speaker = _speaker_metadata(body)
+        cue = {"start_ms": start, "end_ms": end, "text": _join_rolling_lines(body, rolling=rolling)}
+        if speaker:
+            cue['speaker'] = speaker
+        cues.append(cue)
     if not cues and text.strip() and re.search(r"\d\s*-->", text):
         raise ValueError("未找到可读取的字幕时间，支持 SRT／WebVTT 标准时间格式。")
     return _deduplicate_cues(cues, rolling=rolling)

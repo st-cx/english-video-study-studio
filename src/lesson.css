@@ -19,3 +19,30 @@
 .scene-chinese{font-size:36px;max-height:132px;min-height:77px}.scene-cover-area{top:160px}.scene-context{margin-top:18px;padding:16px 20px;max-height:164px}.scene-context-body{margin-top:10px;row-gap:4px}.scene-context-body strong,.scene-context-phrase .scene-context-body strong{font-size:35px;line-height:1.2}.scene-word[role=button]{cursor:pointer}.scene-word[role=button]:focus-visible{outline:2px solid #ffbd67;outline-offset:3px;border-radius:3px}
 
 .scene-source-video{display:block;width:100%;height:100%;object-fit:contain;background:#101624}
+
+/* Reserve space for complete contextual definitions and keep every teaching
+   field above the subtitle band without reducing the 32px reading text. */
+.scene-cover-frame{height:326px}
+.scene-context{max-height:none;overflow:visible}
+.scene-focus-area{top:160px;width:760px}
+.scene-focus-top{margin-bottom:14px}
+.scene-focus-card h2{margin-bottom:15px}
+.scene-definition{max-height:none;overflow:visible;margin-bottom:18px}
+.scene-collocation{margin-bottom:18px}
+.scene-breakdown{gap:8px;margin-bottom:18px}
+
+.scene-definition{line-height:1.45}
+.scene-collocation>b{line-height:1.4}
+.scene-source-example>p{line-height:1.4;margin-top:7px;margin-bottom:6px}
+.scene-source-example>span{line-height:1.4}
+
+/* The subtitle speaker/page row also owns its full band. */
+.scene-cover-image{object-fit:contain;background:#101624}
+.scene-cover-caption{margin-top:9px}
+.scene-context{margin-top:10px;padding-top:13px;padding-bottom:13px}
+.scene-focus-top{margin-bottom:10px}
+.scene-focus-card h2{margin-bottom:10px}
+.scene-definition{margin-bottom:12px}
+.scene-collocation,.scene-breakdown{margin-bottom:12px}
+.scene-source-example{padding-top:2px;padding-bottom:2px}
+.scene-source-example>p{margin-top:6px;margin-bottom:5px}

@@ -9,7 +9,7 @@ from datetime import datetime,timezone
 from pathlib import Path
 from .storage import output_root,save_episode,get_settings
 
-PROCESSING_VERSION='general-4.3'
+PROCESSING_VERSION='general-4.4'
 
 def _signature(value) -> str:
     return hashlib.sha256(json.dumps(value,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
@@ -17,6 +17,31 @@ def _signature(value) -> str:
 def _read(path:Path,default=None):
     try:return json.loads(path.read_text(encoding='utf-8'))
     except (OSError,ValueError):return default
+
+def _global_speech_record(record:dict)->dict:
+    """Migrate diagnostics once; the selected word intervals are already global."""
+    if record.get('time_basis')=='media':return record
+    result=copy.deepcopy(record)
+    offset=int(result.get('clip_start_ms',max(0,int(result['start_ms'])-1500)))
+    span_keys={'aligned_ms','asr_ms','window_asr_ms','measured_ms','original_ms'}
+    def shift(value):
+        if isinstance(value,dict):
+            return {key:([int(v)+offset for v in item] if key in span_keys and isinstance(item,list)
+                         and all(isinstance(v,(int,float)) for v in item)
+                         else int(item)+offset if key in {'start_ms','end_ms'} and isinstance(item,(int,float))
+                         else shift(item)) for key,item in value.items()}
+        if isinstance(value,list):return [shift(item) for item in value]
+        return value
+    result['alignment']=shift(result.get('alignment',{}))
+    for word in result.get('words',[]):
+        if isinstance(word.get('whisper_segment'),(int,float)):
+            word['whisper_segment']=round(word['whisper_segment']+offset/1000,3)
+    for word in result.get('raw_asr_words',[]):
+        word['start_ms']+=offset;word['end_ms']+=offset
+        if isinstance(word.get('whisper_segment'),(int,float)):
+            word['whisper_segment']=round(word['whisper_segment']+offset/1000,3)
+    result.update(clip_start_ms=offset,time_basis='media',index_basis='clip')
+    return result
 
 def _boundaries(audio:Path,duration:float,folder:Path) -> list[float]:
     """Prefer quiet boundaries near five minutes, without deleting pauses."""
@@ -37,33 +62,57 @@ def _boundaries(audio:Path,duration:float,folder:Path) -> list[float]:
     save_episode({'duration':duration,'cuts':cuts},folder,'cuts.json')
     return cuts
 
+
+def _alignment_implementation_fingerprint()->str:
+    """Invalidate only speech checkpoints when the installed aligner changes."""
+    from . import alignment
+    return hashlib.sha256(Path(alignment.__file__).read_bytes()).hexdigest()
+
+
+def _cpu_runtime_identity(model_path:str)->dict:
+    path=Path(model_path)
+    if str(model_path)==path.name:
+        name=str(model_path);snapshot=''
+    else:
+        model_folder=next((p.name for p in path.parents if p.name.startswith('models--Systran--faster-whisper-')),'')
+        name=model_folder.removeprefix('models--Systran--faster-whisper-') if model_folder else 'local_snapshot'
+        snapshot=path.name
+    return {'model':name,'snapshot':snapshot,'device':'cpu','compute_type':'int8'}
+
+
 def _transcribe_chunks(audio:Path,duration:float,folder:Path,fingerprint:str,progress):
     from .pipeline import _local_whisper_path
     from .alignment import align_words,group_connected_speech
-    from faster_whisper import WhisperModel
+    import stable_whisper
+    from .speech_runtime import speech_runtime_plan
+    plan=speech_runtime_plan()
+    alignment_fingerprint=_alignment_implementation_fingerprint()
+    runtime={**{k:v for k,v in plan.items() if k!='path'},'alignment_implementation_sha256':alignment_fingerprint}
     chunks=folder/'.speech';chunks.mkdir(exist_ok=True)
     cuts=_boundaries(audio,duration,chunks)
     output=[];records=[];model=None;backend='CPU'
     for index,(start,end) in enumerate(zip(cuts,cuts[1:])):
         progress('transcribe',10+int(index/max(1,len(cuts)-1)*60),f'识别并对齐原声 {index+1} / {len(cuts)-1} 段')
-        key=_signature([PROCESSING_VERSION,fingerprint,start,end])
+        key=_signature([PROCESSING_VERSION,fingerprint,start,end,runtime])
         checkpoint=chunks/f'{index:04}.json';saved=_read(checkpoint)
-        if not saved or saved.get('key')!=key:
+        valid=(isinstance(saved,dict) and isinstance(saved.get('runtime'),dict)
+               and saved['runtime'].get('alignment_implementation_sha256')==alignment_fingerprint
+               and saved.get('key')==key)
+        if not valid:
             if model is None:
                 try:
-                    import ctranslate2
-                    gpu=ctranslate2.get_cuda_device_count()>0
-                except Exception:gpu=False
-                try:
-                    model=WhisperModel(_local_whisper_path(),device='cuda' if gpu else 'cpu',compute_type='float16' if gpu else 'int8')
-                    backend='GPU' if gpu else 'CPU'
+                    model=stable_whisper.load_faster_whisper(plan['path'],device=plan['device'],compute_type=plan['compute_type'])
+                    backend='GPU' if plan['device']=='cuda' else 'CPU'
+                    runtime={**{k:v for k,v in plan.items() if k!='path'},'alignment_implementation_sha256':alignment_fingerprint}
                 except Exception:
-                    model=WhisperModel(_local_whisper_path(),device='cpu',compute_type='int8');backend='CPU'
+                    cpu_path=_local_whisper_path()
+                    model=stable_whisper.load_faster_whisper(cpu_path,device='cpu',compute_type='int8');backend='CPU'
+                    runtime={**_cpu_runtime_identity(cpu_path),'alignment_implementation_sha256':alignment_fingerprint}
             clip_start=max(0,start-1.5);clip_end=min(duration,end+1.5)
             clip=chunks/f'{index:04}.wav'
             subprocess.run(['ffmpeg','-v','error','-ss',str(clip_start),'-i',str(audio),'-t',str(clip_end-clip_start),'-ar','16000','-ac','1','-y',str(clip)],check=True,capture_output=True,timeout=120)
             def run_asr():
-                segments,info=model.transcribe(str(clip),language=None,word_timestamps=True,vad_filter=True,beam_size=5,condition_on_previous_text=False)
+                segments,info=model.transcribe_original(str(clip),language=None,word_timestamps=True,vad_filter=True,beam_size=5,condition_on_previous_text=False)
                 words=[];suspects=[]
                 for segment in segments:
                     if segment.no_speech_prob>.8 and segment.avg_logprob<-1:
@@ -77,12 +126,15 @@ def _transcribe_chunks(audio:Path,duration:float,folder:Path,fingerprint:str,pro
             try:words,info,suspects=run_asr()
             except Exception:
                 if backend!='GPU':raise
-                model=WhisperModel(_local_whisper_path(),device='cpu',compute_type='int8');backend='CPU'
+                cpu_path=_local_whisper_path()
+                model=stable_whisper.load_faster_whisper(cpu_path,device='cpu',compute_type='int8');backend='CPU'
+                runtime={**_cpu_runtime_identity(cpu_path),'alignment_implementation_sha256':alignment_fingerprint}
                 words,info,suspects=run_asr()
             language=info.language;lp=info.language_probability
+            raw_asr_words=copy.deepcopy(words)
             alignment={}
             if words and (language=='en' or lp<.6):
-                words,alignment=align_words(clip,words,_local_whisper_path(),progress)
+                words,alignment=align_words(clip,words,plan['path'],progress,alignment_model=model)
                 words,groups=group_connected_speech(words);alignment['connected_speech_groups']=groups
             elif language!='en' and lp>=.6:
                 suspects.append({'start_ms':round(start*1000),'end_ms':round(end*1000),'reason':f'本段主要识别语言为 {language}，需要确认英语范围'})
@@ -91,9 +143,14 @@ def _transcribe_chunks(audio:Path,duration:float,folder:Path,fingerprint:str,pro
                 a=w['start_ms']+round(clip_start*1000);b=w['end_ms']+round(clip_start*1000)
                 if start*1000<=(a+b)/2<end*1000 or index==len(cuts)-2 and (a+b)/2==end*1000:
                     selected.append({**w,'start_ms':a,'end_ms':b})
-            saved={'key':key,'words':selected,'backend':backend,'language':language,'language_probability':lp,'suspects':suspects,'alignment':alignment,'start_ms':round(start*1000),'end_ms':round(end*1000)}
+            key=_signature([PROCESSING_VERSION,fingerprint,start,end,runtime])
+            saved={'key':key,'runtime':dict(runtime),'words':selected,'raw_asr_words':raw_asr_words,'backend':backend,'language':language,'language_probability':lp,'suspects':suspects,'alignment':alignment,'start_ms':round(start*1000),'end_ms':round(end*1000),'clip_start_ms':round(clip_start*1000)}
+            saved=_global_speech_record(saved)
             save_episode(saved,chunks,checkpoint.name)
             clip.unlink(missing_ok=True)
+        elif saved.get('time_basis')!='media':
+            saved=_global_speech_record(saved)
+            save_episode(saved,chunks,checkpoint.name)
         # Overlap belongs to one core span. Remove only matching boundary words
         # observed at effectively the same time; never flatten genuine repeats.
         incoming=saved['words']
@@ -109,7 +166,12 @@ def _transcribe_chunks(audio:Path,duration:float,folder:Path,fingerprint:str,pro
                     incoming=incoming[n:];break
         output.extend(incoming);records.append({k:v for k,v in saved.items() if k not in {'key','words'}})
     del model
+    import gc
+    gc.collect()
     if not output:raise RuntimeError('没有识别到可用英语人声。请检查音轨或选择包含英语的片段。')
+    if any(w['end_ms']<=w['start_ms'] for w in output) or any(a['end_ms']-b['start_ms']>40 for a,b in zip(output,output[1:])) or any(record.get('alignment',{}).get('alignment_disputes') for record in records):
+        from .speech_repair import repair_speech_words
+        output,records=repair_speech_words(audio,output,records,folder,lambda message:progress('align',74,message))
     return output,records
 
 def _chapters(sentences:list[dict],duration:float,source_chapters=None) -> list[dict]:
@@ -150,6 +212,80 @@ def _chapter_package(package:dict,chapter:dict)->dict:
     result['cards']=[];result.pop('phrases',None);result.pop('layout',None)
     return result
 
+
+def _teaching_source_identity(package:dict)->str:
+    return _signature({
+        'sentences':[(sentence['id'],sentence['text'],sentence['start_ms'],sentence['end_ms'],sentence.get('word_ids',[])) for sentence in package['sentences']],
+        'words':[(word['id'],word['sentence_id'],word['text'],word['start_ms'],word['end_ms']) for word in package['words']],
+    })
+
+
+def _cached_teaching(part:dict,chapter_folder:Path,revision:str):
+    """Reuse teaching only for the same English IDs and measured intervals.
+
+    Alignment revisions have separate finished output folders. Their unchanged
+    chapters may share teaching, while current ASR probabilities, source metadata
+    and audio diagnostics always remain from the current package.
+    """
+    candidates=[chapter_folder/'teaching.json']
+    base_id=part['episode']['id'].split('-r',1)[0]
+    if re.fullmatch(r'media-[0-9a-f]{20}',base_id):
+        root=output_root()
+        relatives=[root/base_id]+sorted(root.glob(base_id+'-r*'))
+        for folder in relatives:
+            candidate=folder/'.chapters'/chapter_folder.name/'teaching.json'
+            if candidate not in candidates:candidates.append(candidate)
+    identity=_teaching_source_identity(part)
+    for path in candidates:
+        cached=_read(path)
+        if not isinstance(cached,dict) or cached.get('_revision')!=revision:
+            continue
+        try:
+            if _teaching_source_identity(cached)!=identity:continue
+        except (KeyError,TypeError):
+            continue
+        result=copy.deepcopy(part)
+        sentence_by_id={sentence['id']:sentence for sentence in cached['sentences']}
+        for sentence in result['sentences']:
+            for field in ('translation','card_ids'):
+                if field in sentence_by_id[sentence['id']]:sentence[field]=copy.deepcopy(sentence_by_id[sentence['id']][field])
+        word_by_id={word['id']:word for word in cached['words']}
+        for word in result['words']:
+            for field in ('gloss_zh','focus'):
+                if field in word_by_id[word['id']]:word[field]=copy.deepcopy(word_by_id[word['id']][field])
+        for field in ('cards','phrases','layout','teaching_review','editor_review','editor_corrections'):
+            if field in cached:result[field]=copy.deepcopy(cached[field])
+        result['episode']['title_zh']=cached.get('episode',{}).get('title_zh',part['episode'].get('title_zh',''))
+        for field in ('example_excerpts','teaching_format_repairs','phrase_id_repairs','review_adjudications'):
+            if field in cached.get('processing',{}):result.setdefault('processing',{})[field]=copy.deepcopy(cached['processing'][field])
+        result['_revision']=revision
+        if path!=candidates[0]:save_episode(result,chapter_folder,'teaching.json')
+        return result
+    return None
+
+
+def _schedule_chapter_cards(cards:list[dict],chapter:dict)->list[dict]:
+    """Schedule reading time inside one chapter; every card stays in notes."""
+    result=copy.deepcopy(cards)
+    begin,end=int(chapter['start_ms']),int(chapter['end_ms'])
+    visible=[]
+    for card in sorted(result,key=lambda value:int(value['start_ms'])):
+        card.setdefault('original_display_start_ms',card['start_ms'])
+        card.setdefault('original_display_end_ms',card['end_ms'])
+        start=max(begin,int(card['start_ms']))
+        spaced=not visible or start-visible[-1]['start_ms']>=8000
+        if card.get('display',True) and spaced and end-start>=8000:
+            card.update(start_ms=start,display=True);visible.append(card)
+        else:
+            # A late or already-hidden card remains available in the study notes.
+            card['display']=False
+            card['start_ms']=min(end,max(begin,int(card['start_ms'])))
+            card['end_ms']=min(end,max(card['start_ms'],int(card['end_ms'])))
+    for index,card in enumerate(visible):
+        card['end_ms']=visible[index+1]['start_ms'] if index+1<len(visible) else end
+    return result
+
+
 def _merge_chapter(package,part,chapter):
     ids={s['id'] for s in part['sentences']}
     originals={s['id']:s for s in part['sentences']}
@@ -159,7 +295,7 @@ def _merge_chapter(package,part,chapter):
     prefix=chapter['id']+'-'
     for s in part['sentences']:s['card_ids']=[prefix+x for x in s.get('card_ids',[])]
     package['cards']=[c for c in package['cards'] if not set(c['sentence_ids'])&ids]
-    package['cards'].extend({**c,'id':prefix+c['id'],'end_ms':min(c['end_ms'],chapter['end_ms'])} for c in part['cards'])
+    package['cards'].extend({**c,'id':prefix+c['id']} for c in _schedule_chapter_cards(part['cards'],chapter))
     package['phrases']=[p for p in package.get('phrases',[]) if p['sentence_id'] not in ids]+[{**p,'id':prefix+p['id']} for p in part.get('phrases',[])]
     pages=package.setdefault('layout',{'version':1,'pages':[]})['pages']
     pages[:]=[p for p in pages if p['sentence_id'] not in ids]+[{**p,'id':prefix+p['id']} for p in part.get('layout',{}).get('pages',[])]
@@ -199,28 +335,40 @@ def _process_chapters(package,folder,reference,cues,progress,only=None):
     from .teaching_review import review_teaching
     from .layout import prepare_layout
     from .providers import ProviderError
+    # Compare the whole spoken stream once. A subtitle cue may contain several
+    # sentences across a chapter boundary; its complete text is context, not a
+    # second copy of words missing from each neighbouring chapter.
+    from .reference_resolution import resolve_reference_findings,unresolved_alignment
+    from .speech_runtime import speech_runtime_plan
+    plan=speech_runtime_plan()
+    reference_review=resolve_reference_findings(package,reference,folder/'audio.mp3',model_path=plan['path'])
+    package['processing']['reference_review']={k:v for k,v in reference_review.items() if k!='observations'}
+    reference_findings=reference_review['unresolved']
+    alignment_findings=unresolved_alignment(package)
     for chapter in package['chapters']:
         if only and chapter['id']!=only:continue
         if chapter['status']=='ready':continue
         progress('teaching',78,f"正在处理{chapter['title']}")
         part=_chapter_package(package,chapter)
         local_ref=' '.join(c['text'] for c in cues if c['start_ms']<chapter['end_ms'] and c['end_ms']>chapter['start_ms']) if cues else (reference if len(package['chapters'])==1 else '')
-        quality=_quality(part,local_ref)
-        from .reference_check import reference_issues
-        lexical=reference_issues(part['words'],local_ref) if local_ref else []
+        quality=_quality(part,'')
+        quality.update(reference_available=bool(reference),reference_scope='global_audio_anchors')
+        lexical=[issue for issue in reference_findings
+                 if issue['start_ms']<chapter['end_ms'] and issue['end_ms']>chapter['start_ms']]
         chapter['reference_issues']=lexical
         issues=[s['reason'] for record in package['processing'].get('speech_chunks',[]) for s in record.get('suspects',[]) if s['start_ms']<chapter['end_ms'] and s['end_ms']>chapter['start_ms']]+[x['reason'] for x in lexical]
         if package['processing'].get('global_reference_dispute'):
             issues.append('全片参考稿与识别内容差异较大，请核对稿件后确认本单元。')
-        disputes=[d for record in package['processing'].get('speech_chunks',[]) if record['start_ms']<chapter['end_ms'] and record['end_ms']>chapter['start_ms'] for d in record.get('alignment',{}).get('alignment_disputes',[])]
+        disputes=[d for d in alignment_findings if d['start_ms']<chapter['end_ms'] and d['end_ms']>chapter['start_ms']]
+        chapter['alignment_issues']=disputes
         if disputes:issues.append('独立识别与对齐仍有差异，请回听本单元对应位置。')
         if quality['structural_flags'] or not chapter.get('approved') and (quality['needs_review'] or issues):
             chapter.update(status='review',flags=quality['flags']+issues,quality=quality)
             continue
         chapter_folder=folder/'.chapters'/chapter['id'];chapter_folder.mkdir(parents=True,exist_ok=True)
         revision=_signature([PROCESSING_VERSION,part['sentences'],[(w['id'],w['text'],w['start_ms'],w['end_ms']) for w in part['words']],get_settings()['model'],get_settings()['base_url']])
-        cached=_read(chapter_folder/'teaching.json')
-        if cached and cached.get('_revision')==revision:
+        cached=_cached_teaching(part,chapter_folder,revision)
+        if cached:
             part=cached
         else:
             try:
@@ -297,7 +445,8 @@ def create_media_episode(spec:dict,job_folder:Path,progress)->dict:
     if source_spec.get('source_kind')=='bbc':
         from .transcript import spoken_text
         reference=spoken_text(reference)
-    revision=_signature([PROCESSING_VERSION,media['fingerprint'],reference,cues,ref_kind,ref_format,source_spec.get('chapters') or media.get('chapters',[]),get_settings()['model'],get_settings()['base_url']])
+    alignment_fingerprint=_alignment_implementation_fingerprint()
+    revision=_signature([PROCESSING_VERSION,media['fingerprint'],reference,cues,ref_kind,ref_format,source_spec.get('chapters') or media.get('chapters',[]),get_settings()['model'],get_settings()['base_url'],{'alignment_implementation_sha256':alignment_fingerprint}])
     package=_read(folder/'episode.json')
     if package and package.get('processing',{}).get('revision')!=revision and package.get('artifacts',{}).get('study')=='ready':
         episode_id+='-r'+revision[:8];folder=output_root()/episode_id;folder.mkdir(parents=True,exist_ok=True)
@@ -316,10 +465,12 @@ def create_media_episode(spec:dict,job_folder:Path,progress)->dict:
             from .pipeline import _local_whisper_path
             raw,repairs=reconcile(folder/'audio.mp3',raw,reference,_local_whisper_path(),progress)
         sentences,words=_build_sentences(raw)
-        kind=source_spec.get('source_kind','local');url=source_spec.get('source_url') or source_spec.get('url') or ''
+        from .privacy import public_source_url
+        kind=source_spec.get('source_kind','local');url=public_source_url(source_spec.get('source_url') or source_spec.get('url') or '')
         title=str(source_spec.get('title') or path.stem)[:200]
         package={'version':4,'episode':{'id':episode_id,'title':title,'title_zh':'','source_url':url,'audio_url':'','duration_s':media['duration_s'],'source_date':'','cover':'cover.jpg' if (folder/'cover.jpg').exists() else '', 'audio_file':'audio.mp3','fingerprint':media['fingerprint'],'created_at':datetime.now(timezone.utc).isoformat()},'source':{'kind':kind,'name':{'bbc':'BBC Learning English','youtube':'YouTube','bilibili':'哔哩哔哩','direct':'媒体链接'}.get(kind,'本地视频' if media.get('video_path') else '本地音频'),'url':url,'transcript_kind':ref_kind},'media':{'video_file':'source.mp4' if media.get('video_path') else '', 'audio_file':'audio.mp3','duration_s':media['duration_s'],'source_offset_ms':media.get('source_offset_ms',0),'audio_stream_index':source_spec.get('audio_stream_index')},'sentences':sentences,'words':words,'cards':[],'quality':{},'review':{'official_transcript':reference,'recognized_transcript':' '.join(s['text'] for s in sentences),'approved':False},'render':{'width':1920,'height':1080,'fps':30,'status':'prepared'},'artifacts':{'study':'pending','video':'not_requested'},'processing':{'version':PROCESSING_VERSION,'revision':revision,'speech_chunks':records},'chapters':_chapters(sentences,media['duration_s'],source_spec.get('chapters'))}
         package['source']['reference_format']=ref_format
+        package['processing']['alignment_implementation_sha256']=alignment_fingerprint
         package['processing']['reference_orthography']=orthography
         if source_spec.get('chapters') or media.get('chapters'):
             package['chapters']=_chapters(sentences,media['duration_s'],source_spec.get('chapters') or media.get('chapters'))
@@ -332,6 +483,15 @@ def create_media_episode(spec:dict,job_folder:Path,progress)->dict:
         save_episode(package,folder)
         save_episode({'reference':reference,'cues':cues},folder,'.reference.json')
     package.setdefault('processing',{})['render_mode']=spec.get('render_mode','auto')
+    if reference:
+        from .reference_resolution import resolve_reference_findings
+        from .speech_runtime import speech_runtime_plan
+        plan=speech_runtime_plan()
+        measured=resolve_reference_findings(package,reference,folder/'audio.mp3',model_path=plan['path'],
+            progress=progress,cache_dir=folder/'.reference-observations',observe=True,
+            device=plan['device'],compute_type=plan['compute_type'])
+        package['processing']['reference_observations']=measured['observations']
+        save_episode(package,folder)
     _process_chapters(package,folder,reference,cues,progress)
     mode=spec.get('render_mode','auto')
     if mode=='video' or mode=='auto' and package['episode']['duration_s']<=1200:

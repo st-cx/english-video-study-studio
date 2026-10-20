@@ -5,7 +5,7 @@ import difflib
 import re
 from decimal import Decimal
 
-_PATTERN = re.compile(r"\d+(?:[.,]\d+)*|[A-Za-z]+(?:['’\-][A-Za-z]+)*")
+_PATTERN = re.compile(r"\d+(?:[.,]\d+)*|\.\d+|[A-Za-z]+(?:['’\-][A-Za-z]+)*")
 _SMALL = dict(zip('zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen'.split(), range(20)))
 _TENS = dict(zip('twenty thirty forty fifty sixty seventy eighty ninety'.split(), range(20, 100, 10)))
 _SCALES = {'thousand': 1000, 'million': 1_000_000, 'billion': 1_000_000_000}
@@ -20,7 +20,7 @@ _CONTRACTIONS = {
     "he's": 'he is', "she's": 'she is', 'gonna': 'going to', 'wanna': 'want to', 'ok': 'okay',
 }
 # Keep this allowlist narrow: fuzzy matching names would hide real errors.
-_ABBREVIATIONS = {'mt': 'mount'}
+_ABBREVIATIONS = {'mt': 'mount', 'towards': 'toward'}
 
 
 def _parts(text, start_ms=0, end_ms=0):
@@ -46,12 +46,55 @@ def _parts(text, start_ms=0, end_ms=0):
             if value not in _FILLERS:
                 result.append({'value': value, 'raw': raw, 'start_ms': start_ms, 'end_ms': end_ms,
                                'piece_id': (match.start(), match.end()),
-                               'proper': len(raw) > 1 and raw.isupper() and (token not in _FUNCTION or raw in {'US', 'UK'})})
+                               'proper': len(raw) > 1 and raw.isupper() and (value not in _FUNCTION or raw in {'US', 'UK'})})
     return result
 
 
 def _number(token):
-    return token in _NUMBER_WORDS or bool(re.fullmatch(r'\d+(?:[.,]\d+)*', token))
+    return token in _NUMBER_WORDS or bool(re.fullmatch(r'(?:\d+(?:[.,]\d+)*|\.\d+)', token))
+
+
+def _spoken_code_separators(items, reference):
+    """Accept audible separators only beside an explicitly written identifier.
+
+    This changes comparison tokens, never the spoken transcript or its clock.
+    Ordinary occurrences of 'dot' and 'underscore' remain content words.
+    """
+    pairs = {(left.lower(), 'dot' if separator == '.' else 'underscore', right.lower())
+             for left, separator, right in re.findall(r'\b([A-Za-z][A-Za-z0-9]*)([._])([A-Za-z][A-Za-z0-9]*)\b', reference)}
+    result = []
+    for index, item in enumerate(items):
+        omit = False
+        if item['value'] in {'dot', 'underscore'}:
+            for left, separator, right in pairs:
+                if item['value'] != separator:
+                    continue
+                before = any(''.join(x['value'] for x in items[max(0, index - size):index]) == left for size in range(1, 4))
+                after = any(''.join(x['value'] for x in items[index + 1:index + 1 + size]) == right for size in range(1, 4))
+                if before and after:
+                    omit = True
+                    break
+        if not omit:
+            result.append(item)
+    return result
+
+
+
+def _reference_confirmed_contractions(items, reference):
+    """Expand noun+'s only with the identical explicit noun+is in the source.
+
+    This only compares spelling; it never manufactures two timed speech words.
+    Possessive nouns and has-contractions without this exact context stay intact.
+    """
+    nouns = {noun.lower() for noun in re.findall(r"\b([A-Za-z]+)\s+is\b", reference or '', re.I)}
+    result = []
+    for item in items:
+        value = item['value']
+        if value.endswith("'s") and value[:-2] in nouns:
+            result.extend([{**item, 'value': value[:-2]}, {**item, 'value': 'is'}])
+        else:
+            result.append(item)
+    return result
 
 
 def _number_value(parts):
@@ -120,6 +163,8 @@ def _canonical(items):
                     pass
                 elif next_value == 'point' and 'point' not in values:
                     pass
+                elif next_value.startswith('.') and len(values) == 1 and (previous.isdigit() or previous in _SMALL):
+                    pass
                 elif 'point' in values and (next_value.isdigit() or next_value in _SMALL and _SMALL[next_value] < 10):
                     pass
                 elif previous in _TENS and next_value in _SMALL and 0 < _SMALL[next_value] < 10:
@@ -150,7 +195,7 @@ def reference_issues(words: list[dict], reference: str) -> list[dict]:
     expected = []
     for index, match in enumerate(_PATTERN.finditer(reference or '')):
         expected.extend({**item, 'source_id': index} for item in _parts(match.group()))
-    recognized, expected = _canonical(recognized), _canonical(expected)
+    recognized, expected = _canonical(_reference_confirmed_contractions(_spoken_code_separators(recognized, reference or ''), reference or '')), _canonical(expected)
     if not recognized or not expected:
         return []
     result = []

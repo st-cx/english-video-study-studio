@@ -46,6 +46,15 @@ if errorlevel 1 (
   exit /b 1
 )
 echo 正在安装本地语音与素材处理工具……
+".venv\Scripts\python.exe" -m pip --version >nul 2>nul
+if errorlevel 1 (
+  ".venv\Scripts\python.exe" -m ensurepip --upgrade
+  if errorlevel 1 (
+    echo 无法准备本项目的安装工具，现有配置与学习资料已保留。
+    pause
+    exit /b 1
+  )
+)
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 (

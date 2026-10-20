@@ -10,7 +10,7 @@ export type EpisodePackage = {
   layout?:{version:number;pages:{id:string;sentence_id:string;start_ms:number;end_ms:number;lines:string[][];translation?:string}[]};
   source?:{kind:string;name?:string;url?:string;transcript_kind?:string};
   media?:{video_file?:string;audio_file:string;duration_s:number;source_offset_ms?:number;audio_stream_index?:number};
-  chapters?:{id:string;title:string;start_ms:number;end_ms:number;status:'ready'|'review'|'pending'}[];
+  chapters?:{id:string;title:string;start_ms:number;end_ms:number;status:'ready'|'review'|'pending';teaching_status?:string}[];
   artifacts?:{study:'pending'|'ready';video:'pending'|'ready'|'not_requested'|'failed'};
   quality:{needs_review:boolean;flags:string[];source_similarity:number|null};
   review:{recognized_transcript:string;official_transcript:string;approved:boolean;[key:string]:unknown};render:Record<string,unknown>;

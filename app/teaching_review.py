@@ -49,7 +49,7 @@ def review_teaching(package: dict, progress, cache_dir: Path | None = None) -> N
               '逐条检查所有ID，一次性列出发现的全部实质错误；不要分多次挑选小部分。对“原义也可接受”的同义措辞不得提出correction。'
               '音频句子允许跨句承接、插话和省略；利用context_before/context_after判断含义，不要仅因句子是片段就判为无法确认。'
               '所有中文用简体中文。不要为措辞偏好改写，不把自然意译判错。功能词的释义允许简短解释语法作用。'
-              '核对不定式to、关系代词和从句引导词，不应机械解释为去、那、谁；means doing不能误判为宾语从句，副词不决定动词形态。'
+              '核对不定式to、关系代词和从句引导词，不应机械解释为去、那、谁；means doing不能误判为宾语从句，副词不决定动词形态。be+过去分词构成被动时be是助动词；Python口述type of不等于一段可执行代码，type()是内置函数。公式口述须区分两个数取平均与整个和再相除。what从句里的what可作句末介词of的宾语，不是凭空省略一个先行词。口头截断或重启不能被翻译成无依据的技术结论。'
               '固定短语按整体解释；同一个词在不同视频中应按实际语境取义，不套用其他节目的词义。'
               '不要更改英文、ID、时间或例句。只返回 JSON {ok:true,corrections:[],issues:[]}。'
               '有可直接修正的错误，corrections返回[{type:"sentence|word|phrase|card",id,field,value,reason}]；'
@@ -58,7 +58,7 @@ def review_teaching(package: dict, progress, cache_dir: Path | None = None) -> N
     for i, batch in enumerate(batches):
         ids = {s['id'] for s in batch}
         progress('teaching_review', 90, f'正在复核译文、词义和原句出处 {i+1} / {len(batches)}')
-        for attempt in range(3):
+        for attempt in range(5):
             payload = {'sentences': [{k:s[k] for k in ('id','text','translation','speaker')} for s in batch],
                        'context_before':[s['text'] for s in package['sentences'][max(0,i*7-3):i*7]],
                        'context_after':[s['text'] for s in package['sentences'][(i+1)*7:(i+1)*7+3]],
@@ -98,7 +98,13 @@ def review_teaching(package: dict, progress, cache_dir: Path | None = None) -> N
                 changes=result.get('corrections',[])
                 if not isinstance(changes,list) or any(invalid_scope(c) for c in changes):raise ProviderError('教学复核修复后仍跨组修改，已暂停。')
                 if result.get('issues') or result.get('ok') is not True and not changes:raise ProviderError('教学复核修复后仍有待确认内容。')
-            changes, unchanged = prepared_changes(result, ids)
+            try:
+                changes, unchanged = prepared_changes(result, ids)
+            except ProviderError:
+                result=ask_deepseek(system+' 上次修正值未通过格式校验。每项correction必须有type/id/field/value，value必须为非空字符串；points是完整的[{label,text}]，最多3项，每项label/text均不超过40字符。严格仅引用当前input中的ID和许可字段。修复格式并返回当前批次完整结论，不能把错误原样重复。',json.dumps({'input':payload,'previous_review':result},ensure_ascii=False),max_tokens=4096,cache_dir=cache_dir)
+                changes,unchanged=prepared_changes(result,ids)
+                if result.get('issues'):pause(result['issues'])
+
             if not changes and unchanged and result.get('ok') is not True:
                 # Identical values cannot fix anything. Obtain an explicit verdict
                 # instead of consuming all correction rounds on cached no-ops.
@@ -112,12 +118,13 @@ def review_teaching(package: dict, progress, cache_dir: Path | None = None) -> N
                 if result.get('ok') is not True:
                     pause([{'reason': '模型没有明确通过教学复核；未提供可生效的修正或具体疑点'}])
                 break
+            oscillating=any(any(all(old.get(k)==change.get(k) for k in ('type','id','field','value')) for old in history) for change in changes)
             for change in changes:
                 kind, field = change.get('type'),change.get('field')
                 target = targets[kind][0][change['id']]
                 history.append({**change,'before':target.get(field)})
                 target[field] = change['value']
-            if attempt==2:
+            if attempt==4 or oscillating:
                 package['teaching_review']={'status':'needs_review','issues':[{'reason':'多轮复核仍提出实质修正，需要检查最终修正内容', 'targets': [{'type': c['type'], 'id': c['id'], 'field': c['field']} for c in changes]}],'corrections':history}
                 raise ProviderError('教学复核修正后仍未明确通过，已保留内容等待检查。')
     package['teaching_review'] = {'status':'passed','sentence_count':len(package['sentences']),'corrections':history,'note':'模型复核通过仍不能替代人工事实核验。'}

@@ -59,13 +59,13 @@ function LayoutAudit({episode}:AuditProps){
           checks++;
           if(line.scrollWidth>line.clientWidth+2)add('caption-overflow','英文字幕超出固定行宽','.scene-caption-line',{scrollWidth:line.scrollWidth,clientWidth:line.clientWidth});
         }
-        const englishTop=english.getBoundingClientRect().top;
+        const englishTop=(section.querySelector<HTMLElement>('.scene-subtitle-area')||english).getBoundingClientRect().top;
         const tolerance=canvas.getBoundingClientRect().width/1920*2;
         for(const [selector,label] of [['.scene-context','当前词义'],['.scene-focus-card','讲解卡'],['.scene-intro','主题卡']] as const){
           for(const node of section.querySelectorAll<HTMLElement>(selector)){
             checks++;
             const bottom=node.getBoundingClientRect().bottom;
-            if(bottom>englishTop-tolerance)add('subtitle-overlap',`${label}与英文字幕区域重叠`,selector,{bottom:Math.round(bottom*100)/100,englishTop:Math.round(englishTop*100)/100});
+            if(bottom>englishTop-tolerance)add('subtitle-overlap',`${label}与字幕及其来源行区域重叠`,selector,{bottom:Math.round(bottom*100)/100,englishTop:Math.round(englishTop*100)/100});
           }
         }
       }

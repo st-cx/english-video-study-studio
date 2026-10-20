@@ -3,16 +3,16 @@ import type {EpisodePackage,TimedWord} from './shared';
 import {deriveLessonState, formatClock, cardHeading, sourceName, episodeIndex} from './shared';
 import './lesson.css';
 
-type SceneProps={episode:EpisodePackage;timeMs:number;coverSrc?:string;videoSrc?:string;videoComponent?:React.ElementType;videoStartFrame?:number;hideChinese?:boolean;imageComponent?:React.ElementType;onWordSelect?:(word:TimedWord)=>void};
+type SceneProps={episode:EpisodePackage;timeMs:number;animate?:boolean;coverSrc?:string;videoSrc?:string;videoComponent?:React.ElementType;videoStartFrame?:number;hideChinese?:boolean;imageComponent?:React.ElementType;onWordSelect?:(word:TimedWord)=>void};
 function Mark({text,term}:{text:string;term:string}){
   if(!term||!text.toLowerCase().includes(term.toLowerCase()))return <>{text}</>;
   const at=text.toLowerCase().indexOf(term.toLowerCase());
   return <>{text.slice(0,at)}<mark>{text.slice(at,at+term.length)}</mark>{text.slice(at+term.length)}</>;
 }
-export function LessonScene({episode,timeMs,coverSrc,videoSrc,videoComponent:Video='video',videoStartFrame,hideChinese=false,imageComponent:Image='img',onWordSelect}:SceneProps){
+export function LessonScene({episode,timeMs,animate=true,coverSrc,videoSrc,videoComponent:Video='video',videoStartFrame,hideChinese=false,imageComponent:Image='img',onWordSelect}:SceneProps){
   const state=deriveLessonState(episode,timeMs),card=state.card,unit=state.glossUnit;
   const source=coverSrc??episode.episode.cover;
-  const cardFade=card?Math.min(1,Math.max(0,(timeMs-card.start_ms)/180)):1;
+  const cardFade=card&&animate?Math.min(1,Math.max(0,(timeMs-card.start_ms)/180)):1;
   const progress=Math.max(0,Math.min(1,timeMs/(episode.episode.duration_s*1000)));
   const index=episodeIndex(episode),sentenceIndex=index.sentenceIndex.get(state.sentence?.id||'')??-1;
   const outro=timeMs>(episode.sentences.at(-1)?.end_ms??Infinity)+1200;

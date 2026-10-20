@@ -1,7 +1,7 @@
 import copy,json,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
-from app.general import _chapters,_merge_chapter,_chapter_package,_signature,PROCESSING_VERSION,_transcribe_chunks
+from app.general import _chapters,_merge_chapter,_chapter_package,_signature,PROCESSING_VERSION,_transcribe_chunks,_alignment_implementation_fingerprint
 from app.pipeline import _quality
 from app.privacy import public_package
 from app.renderer import export_video
@@ -38,7 +38,9 @@ class GeneralTests(unittest.TestCase):
     def test_cached_speech_resumes_without_loading_model(self):
         with tempfile.TemporaryDirectory() as d:
             f=Path(d);speech=f/'.speech';speech.mkdir();(speech/'cuts.json').write_text(json.dumps({'duration':2,'cuts':[0,2]}))
-            cached={'key':_signature([PROCESSING_VERSION,'abc',0,2]),'words':[{'text':'Hello.','start_ms':100,'end_ms':800,'probability':.9}],'backend':'CPU','language':'en','language_probability':1,'suspects':[],'alignment':{},'start_ms':0,'end_ms':2000}
+            from app.speech_runtime import speech_runtime_plan
+            runtime={**{k:v for k,v in speech_runtime_plan().items() if k!='path'},'alignment_implementation_sha256':_alignment_implementation_fingerprint()}
+            cached={'key':_signature([PROCESSING_VERSION,'abc',0,2,runtime]),'runtime':runtime,'words':[{'text':'Hello.','start_ms':100,'end_ms':800,'probability':.9}],'backend':'CPU','language':'en','language_probability':1,'suspects':[],'alignment':{},'start_ms':0,'end_ms':2000}
             (speech/'0000.json').write_text(json.dumps(cached))
             with patch('faster_whisper.WhisperModel',side_effect=AssertionError('must not load')):
                 words,_=_transcribe_chunks(f/'audio.mp3',2,f,'abc',lambda *a:None)
