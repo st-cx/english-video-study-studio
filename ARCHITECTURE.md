@@ -39,3 +39,11 @@
 时间修改后，句子、字幕页、讲解卡和主题目录从同一组词边界重新推导；失效的视频和同步审查引用会被清除。语义文字修改另行重建相关中文讲解，不重用旧内容的审查结论。
 
 `src/reviewNavigation.ts` 只从课程中现存的未决记录推导学习页检查清单，按时间排序和去重，不把点击或模型分数当作确认。人工审查页默认隐藏模型边界；模型已参与修正时，页面明确提示其对照不能充当独立精度证明。
+
+## v0.6.0 资源、确认与投稿约定
+
+原声与词语修订记录 → EpisodePackage → 学习页／导出文件 → 版本及文件指纹绑定的投稿草稿。当前播放仍只由媒体时钟推导。issue_review 按重叠／相邻原声区间合并问题，普通文字反馈与50词边界验收分别存储，英文或问题版本改变即拒绝旧反馈。选择参考稿只记录修订请求，不伪造对齐。
+
+app.workflows 使用独立 resource-workflows.json，负责发现、去重及现有生产队列的 job_id 关联；app.publishing 独立保存 publications.json 和 bilibili.key.dpapi。原 settings.json、DeepSeek密钥、学习页存储键均保持。生产任务为唯一制作状态来源；投稿只能读已导出成片，不得上传原始媒体。提交结果未知保留 uncertain，重启和重复点击不得自动重发。
+
+API：GET /api/workflows、/api/publishing、/api/review-feedback?episode_id；POST /api/workflows、/<id>/scan|delete、/<id>/<item>/generate；POST /api/publishing/login、/login/poll、/disconnect、/drafts、/<id>/submit|bundle；POST /api/review-feedback。订阅轮询仅在本地服务运行时执行，逐来源显式开启自动制作／投稿。

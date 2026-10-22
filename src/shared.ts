@@ -12,6 +12,7 @@ export type EpisodePackage = {
   source?:{kind:string;name?:string;url?:string;transcript_kind?:string};
   media?:{video_file?:string;audio_file:string;duration_s:number;source_offset_ms?:number;audio_stream_index?:number};
   chapters?:{id:string;title:string;start_ms:number;end_ms:number;status:'ready'|'review'|'pending';teaching_status?:string;reference_issues?:SourceReviewIssue[];alignment_issues?:SourceReviewIssue[]}[];
+  issue_review?:{page:string;issue_count:number;group_count:number;listening_seconds:number;revision:string};
   sync_review?:{page:string;sample_count:number;human_annotated_count:number;human_status:string};
   study_sections?:{version:number;status:'ready';source_fingerprint:string;items:{id:string;title:string;summary:string;start_ms:number;end_ms:number;start_sentence_id:string;sentence_ids:string[];evidence_sentence_ids:string[]}[]};
   artifacts?:{study:'pending'|'ready';video:'pending'|'ready'|'not_requested'|'failed'};

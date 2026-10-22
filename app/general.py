@@ -322,13 +322,20 @@ def _write_bundle(package,folder,progress):
                 if w.get('focus') and w.get('gloss_zh') and w['text'].lower() not in seen:
                     seen.add(w['text'].lower());writer.writerow([("'" if re.match(r'^[=+@-]',w['text']) else '')+w['text'],w['gloss_zh'],w['start_ms']/1000])
         package.setdefault('render',{}).update(english_subtitles=en.name,chinese_subtitles=zh.name,ass_file=ass.name,study_notes='study-notes.md')
+        review_files=[]
+        if any(c.get('reference_issues') or c.get('alignment_issues') for c in package.get('chapters',[])):
+            from .issue_review import write_issue_review
+            package['issue_review']=write_issue_review(package,staged,media_folder=folder)
+            review_files=['issue-review/review.html']
+        else:
+            package.pop('issue_review',None)
         package.setdefault('artifacts',{})['study']='pending'
         save_episode(package,staged)
         package.setdefault('processing',{})['layout_audit']=audit_layout(staged/'episode.json',folder,progress)
         package['artifacts']['study']='ready'
         write_study_page(package,staged)
         save_episode(package,staged)
-        _publish(staged,folder,[en.name,zh.name,ass.name,'study-notes.md','vocabulary.csv','study.html','episode.json'])
+        _publish(staged,folder,[en.name,zh.name,ass.name,'study-notes.md','vocabulary.csv','study.html',*review_files,'episode.json'])
     original_package.clear();original_package.update(package)
     progress('study',94,'离线学习页、字幕和精读笔记已生成')
 
@@ -472,6 +479,8 @@ def create_media_episode(spec:dict,job_folder:Path,progress)->dict:
         title=str(source_spec.get('title') or path.stem)[:200]
         package={'version':4,'episode':{'id':episode_id,'title':title,'title_zh':'','source_url':url,'audio_url':'','duration_s':media['duration_s'],'source_date':'','cover':'cover.jpg' if (folder/'cover.jpg').exists() else '', 'audio_file':'audio.mp3','fingerprint':media['fingerprint'],'created_at':datetime.now(timezone.utc).isoformat()},'source':{'kind':kind,'name':{'bbc':'BBC Learning English','youtube':'YouTube','bilibili':'哔哩哔哩','direct':'媒体链接'}.get(kind,'本地视频' if media.get('video_path') else '本地音频'),'url':url,'transcript_kind':ref_kind},'media':{'video_file':'source.mp4' if media.get('video_path') else '', 'audio_file':'audio.mp3','duration_s':media['duration_s'],'source_offset_ms':media.get('source_offset_ms',0),'audio_stream_index':source_spec.get('audio_stream_index')},'sentences':sentences,'words':words,'cards':[],'quality':{},'review':{'official_transcript':reference,'recognized_transcript':' '.join(s['text'] for s in sentences),'approved':False},'render':{'width':1920,'height':1080,'fps':30,'status':'prepared'},'artifacts':{'study':'pending','video':'not_requested'},'processing':{'version':PROCESSING_VERSION,'revision':revision,'speech_chunks':records},'chapters':_chapters(sentences,media['duration_s'],source_spec.get('chapters'))}
         package['source']['reference_format']=ref_format
+        if isinstance(source_spec.get('source_metadata'),dict):
+            package['source']['metadata']={k:str(v)[:500] for k,v in source_spec['source_metadata'].items() if k in {'title','uploader','channel','license','upload_date'}}
         package['processing']['alignment_implementation_sha256']=alignment_fingerprint
         package['processing']['reference_orthography']=orthography
         if source_spec.get('chapters') or media.get('chapters'):

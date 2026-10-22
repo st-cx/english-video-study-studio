@@ -1,0 +1,122 @@
+import {useCallback,useEffect,useRef,useState} from 'react';
+import type {FormEvent} from 'react';
+import './creator.css';
+
+type EpisodeOption={id:string;title:string;title_zh?:string;source?:{url?:string;name?:string;kind?:string}};
+type PublicationOptions={tid:number;tags:string[];description:string;copyright:number;rights_confirmed:boolean};
+type ResourceItem={id:string;title:string;url:string;status:string;job_id?:string;publication_id?:string;error?:string};
+type ResourceSource={id:string;name:string;url:string;mode:'rss'|'playlist'|'single';enabled:boolean;interval_minutes:number;auto_generate:boolean;auto_publish:boolean;publication?:PublicationOptions;last_checked?:number;error?:string;items?:ResourceItem[]};
+type AccountState={configured:boolean;status?:string;adapter_available?:boolean;adapter_version?:string;creator_url?:string;live_submission_verified?:boolean;message?:string};
+type Publication={id:string;episode_id:string;status:string;title:string;tid:number;tags:string[];description:string;copyright:number;source?:string;rights_confirmed?:boolean;auto_publish?:boolean;blockers?:string[];error?:string;url?:string;creator_url?:string;bundle_file?:string;attempted_at?:string;updated_at?:string};
+type LoginState={login_id:string;qr_image?:string;qr_data?:string;status:string;expires_in?:number};
+type SourceForm={name:string;url:string;mode:ResourceSource['mode'];interval:string;autoGenerate:boolean;autoPublish:boolean;rights:boolean;tid:string;tags:string;description:string};
+const creatorUrl='https://member.bilibili.com/platform/upload/video/frame';
+const sourceModes:Record<string,string>={rss:'RSS / 播客',playlist:'YouTube 播放列表',single:'单个视频 / 音频'};
+const statusNames:Record<string,string>={draft:'待投稿',ready:'可投稿',blocked:'需要处理',submitting:'正在提交',published:'已提交 B站',uncertain:'请核对提交结果',failed:'未完成',discovered:'已发现',queued:'已加入制作队列',publication:'已生成投稿草稿'};
+const loginNames:Record<string,string>={scan:'请使用 B站 App 扫码',scanned:'请在手机上确认',confirm:'请在手机上确认',done:'登录信息已保存',expired:'二维码已过期，请重新获取',timeout:'二维码已过期，请重新获取'};
+
+function errorText(error:unknown){return error instanceof Error?error.message:'操作未完成，请稍后重试。';}
+async function request<T>(path:string,body?:unknown,signal?:AbortSignal):Promise<T>{
+  const response=await fetch(path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal});
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(typeof result.error==='string'?result.error:`请求未完成（${response.status}）`);
+  return result as T;
+}
+function externalUrl(value?:string,fallback=''){try{const url=new URL(value||'');return /^https?:$/.test(url.protocol)&&!url.username&&!url.password?url.href:fallback;}catch{return fallback;}}
+function downloadUrl(job:Publication){const file=job.bundle_file||'';if(!file||file.split(/[\\/]/).some(part=>!part||part==='.'||part==='..'||part.includes(':')))return '';return `/files/${encodeURIComponent(job.episode_id)}/${file.split(/[\\/]/).map(encodeURIComponent).join('/')}`;}
+function tagsFrom(text:string){const tags=[...new Set(text.split(/[,，\n]/).map(tag=>tag.trim()).filter(Boolean))];if(!tags.length||tags.length>10||tags.some(tag=>tag.length>20))throw Error('请填写 1 至 10 个标签，每个最多 20 个字符。');return tags;}
+function partition(text:string){const value=Number(text);if(!/^\d+$/.test(text)||!Number.isSafeInteger(value)||value<1)throw Error('分区编号需要填写正整数。');return value;}
+function checkedTime(value?:number|string){if(!value)return '尚未检查';const date=new Date(typeof value==='number'?value*1000:value);return Number.isNaN(date.getTime())?'尚未检查':date.toLocaleString('zh-CN',{hour12:false});}
+
+export function CreatorStudio({episodes}:{episodes:EpisodeOption[]}){
+  const [sources,setSources]=useState<ResourceSource[]>([]),[jobs,setJobs]=useState<Publication[]>([]),[account,setAccount]=useState<AccountState|null>(null);
+  const [loading,setLoading]=useState(true),[refreshError,setRefreshError]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState('');
+  const [busy,setBusy]=useState<string[]>([]),busyRef=useRef(new Set<string>()),refreshing=useRef(false),mounted=useRef(true);
+  const [form,setForm]=useState<SourceForm>({name:'',url:'',mode:'rss',interval:'60',autoGenerate:false,autoPublish:false,rights:false,tid:'208',tags:'英语学习,精听',description:''});
+  const [episodeId,setEpisodeId]=useState(''),[draftTitle,setDraftTitle]=useState(''),[draftSource,setDraftSource]=useState(''),[draftDescription,setDraftDescription]=useState(''),[draftTags,setDraftTags]=useState('英语学习,精听'),[draftTid,setDraftTid]=useState('208'),[draftCopyright,setDraftCopyright]=useState(2),[draftRights,setDraftRights]=useState(false);
+  const [login,setLogin]=useState<LoginState|null>(null),[loginError,setLoginError]=useState('');
+  const refresh=useCallback(async(signal?:AbortSignal)=>{
+    if(refreshing.current)return;
+    refreshing.current=true;
+    try{
+      const results=await Promise.allSettled([request<{sources:ResourceSource[]}>('/api/workflows',undefined,signal),request<{account:AccountState;jobs:Publication[]}>('/api/publishing',undefined,signal)]);
+      if(!mounted.current||signal?.aborted)return;
+      const problems:string[]=[];
+      if(results[0].status==='fulfilled')setSources(results[0].value.sources||[]);else problems.push(errorText(results[0].reason));
+      if(results[1].status==='fulfilled'){setAccount(results[1].value.account);setJobs(results[1].value.jobs||[]);}else problems.push(errorText(results[1].reason));
+      setRefreshError(problems.join(' '));
+    }finally{refreshing.current=false;if(mounted.current)setLoading(false);}
+  },[]);
+  useEffect(()=>{mounted.current=true;const controller=new AbortController();void refresh(controller.signal);const timer=window.setInterval(()=>void refresh(controller.signal),5000);return()=>{mounted.current=false;controller.abort();window.clearInterval(timer);};},[refresh]);
+  async function run(key:string,operation:()=>Promise<void>){
+    if(busyRef.current.has(key))return;
+    busyRef.current.add(key);setBusy([...busyRef.current]);setError('');setNotice('');
+    try{await operation();}catch(problem){if(mounted.current)setError(errorText(problem));}finally{busyRef.current.delete(key);if(mounted.current)setBusy([...busyRef.current]);}
+  }
+  const isBusy=(key:string)=>busy.includes(key);
+  const loginId=login?.login_id||'',loginFinished=!!login&&['done','expired','timeout'].includes(login.status);
+  useEffect(()=>{
+    if(!loginId||loginFinished)return;
+    let active=true,polling=false;const controller=new AbortController();
+    const poll=async()=>{if(polling)return;polling=true;try{const result=await request<{status:string;configured?:boolean}>('/api/publishing/login/poll',{login_id:loginId},controller.signal);if(!active)return;setLogin(old=>old?.login_id===loginId?{...old,status:result.status}:old);setLoginError('');if(result.status==='done')await refresh(controller.signal);}catch(problem){if(active&&!controller.signal.aborted)setLoginError(errorText(problem));}finally{polling=false;}};
+    const timer=window.setInterval(()=>void poll(),2500);void poll();return()=>{active=false;controller.abort();window.clearInterval(timer);};
+  },[loginId,loginFinished,refresh]);
+  function updateForm<K extends keyof SourceForm>(key:K,value:SourceForm[K]){setForm(old=>({...old,[key]:value}));}
+  async function saveSource(event:FormEvent){event.preventDefault();await run('source-form',async()=>{
+    if(!externalUrl(form.url))throw Error('请填写完整的 http 或 https 资源地址。');
+    if(!/^\d+$/.test(form.interval)||Number(form.interval)<15||Number(form.interval)>10080)throw Error('检查间隔需在 15 分钟至 7 天之间。');
+    if(form.autoPublish&&(!form.autoGenerate||!form.rights))throw Error('自动投稿需要先启用制作，并确认拥有素材的发布权利。');
+    await request('/api/workflows',{name:form.name.trim(),url:form.url.trim(),mode:form.mode,enabled:true,interval_minutes:Number(form.interval),auto_generate:form.autoGenerate,auto_publish:form.autoPublish,publication:{tid:partition(form.tid),tags:tagsFrom(form.tags),description:form.description,copyright:2,rights_confirmed:form.rights}});
+    setForm(old=>({...old,name:'',url:'',autoGenerate:false,autoPublish:false,rights:false}));setNotice('资源订阅已保存。首次检查只取来源列表首条，历史内容不会批量加入。');await refresh();
+  });}
+  async function toggleSource(source:ResourceSource){await run('source-'+source.id,async()=>{await request('/api/workflows',{id:source.id,name:source.name,url:source.url,mode:source.mode,enabled:!source.enabled,interval_minutes:source.interval_minutes,auto_generate:source.auto_generate,auto_publish:source.auto_publish,publication:source.publication||{}});setNotice(source.enabled?'订阅已暂停，已生成的学习包仍保留。':'订阅已恢复。');await refresh();});}
+  function chooseEpisode(id:string){setEpisodeId(id);const item=episodes.find(episode=>episode.id===id);setDraftTitle(item?.title_zh||item?.title||'');setDraftSource(item?.source?.url||'');setDraftRights(false);}
+  async function prepareDraft(event:FormEvent){event.preventDefault();await run('draft-form',async()=>{if(!episodeId)throw Error('请选择已制作的课程。');if(draftCopyright===2&&draftSource&&!externalUrl(draftSource))throw Error('转载来源请填写原始完整链接。');const result=await request<Publication>('/api/publishing/drafts',{episode_id:episodeId,options:{title:draftTitle.trim(),tid:partition(draftTid),tags:tagsFrom(draftTags),description:draftDescription,copyright:draftCopyright,source:draftSource.trim(),rights_confirmed:draftRights,auto_publish:false}});setNotice(result.status==='blocked'?'草稿已保存；下面列出了投稿前需要处理的事项。':'投稿草稿已就绪，请检查信息后选择直接投稿或导出投稿包。');await refresh();});}
+  async function startLogin(){await run('account',async()=>{setLoginError('');const result=await request<LoginState>('/api/publishing/login',{});setLogin(result);setNotice('请使用 B站 App 扫描下方二维码，并在手机上确认。');});}
+  async function publicationAction(job:Publication,action:'submit'|'bundle'){await run('publication-'+job.id,async()=>{const result=await request<Publication>(`/api/publishing/${encodeURIComponent(job.id)}/${action}`,{});setJobs(old=>old.map(row=>row.id===result.id?result:row));setNotice(action==='bundle'?'投稿包已生成，可在这条记录中下载。':result.status==='uncertain'?'提交结果尚未确认，请先打开创作中心核对。':'投稿请求已交给本机队列；只有取得稿件编号后才会标记为已提交。');await refresh();});}
+  async function copy(text:string,key:string){await run(key,async()=>{if(!navigator.clipboard?.writeText)throw Error('浏览器不支持自动复制，请展开投稿信息后手动复制。');await navigator.clipboard.writeText(text);setNotice('已复制到剪贴板。');});}
+  const selectedEpisode=episodes.find(item=>item.id===episodeId);
+  return <section className="creator-studio" aria-labelledby="creator-heading">
+    <header className="creator-heading"><div><small>RESOURCE → STUDY → SHARE</small><h2 id="creator-heading">资源订阅与投稿</h2><p>先生成可核对的精听课程，再将合格成品交给发布队列。</p></div><span className="creator-local">原模型配置保持不变</span></header>
+    {error&&<div className="creator-feedback creator-error" role="alert"><span>{error}</span><button type="button" onClick={()=>setError('')} aria-label="关闭投稿错误">×</button></div>}
+    {notice&&<div className="creator-feedback" role="status"><span>{notice}</span><button type="button" onClick={()=>setNotice('')} aria-label="关闭操作提示">×</button></div>}
+    {refreshError&&<div className="creator-refresh-error" role="status">列表暂未更新：{refreshError} <button type="button" disabled={loading} onClick={()=>void refresh()}>重新读取</button></div>}
+    <div className="creator-columns">
+      <section className="creator-panel" aria-labelledby="resources-heading"><div className="creator-panel-heading"><div><small>01 · DISCOVER</small><h3 id="resources-heading">订阅英语资源</h3></div><span>{sources.length} 个来源</span></div>
+        <p className="creator-description">支持 RSS / 播客、YouTube 播放列表和单个素材。工作室运行时按间隔检查；默认只发现资源，自动制作和投稿由你分别开启。</p>
+        <form onSubmit={event=>void saveSource(event)}><fieldset disabled={isBusy('source-form')}><legend className="creator-sr-only">新建资源订阅</legend>
+          <label>订阅名称<input value={form.name} onChange={event=>updateForm('name',event.target.value)} maxLength={120} placeholder="例如：每周英语课程"/></label>
+          <div className="creator-fields"><label>资源类型<select value={form.mode} onChange={event=>updateForm('mode',event.target.value as SourceForm['mode'])}><option value="rss">RSS / 播客</option><option value="playlist">YouTube 播放列表</option><option value="single">单个视频 / 音频</option></select></label><label>检查间隔<select value={form.interval} onChange={event=>updateForm('interval',event.target.value)}><option value="15">每 15 分钟</option><option value="60">每小时</option><option value="180">每 3 小时</option><option value="1440">每天</option></select></label></div>
+          <label>资源地址<input type="url" required value={form.url} onChange={event=>updateForm('url',event.target.value)} spellCheck={false} placeholder={form.mode==='rss'?'https://example.org/podcast/feed.xml':form.mode==='playlist'?'https://www.youtube.com/playlist?list=…':'https://www.youtube.com/watch?v=…'}/></label>
+          <p className="creator-hint">{form.mode==='rss'?'填写提供音视频附件的 RSS / Atom 地址；普通网站首页不等于订阅地址。':form.mode==='playlist'?'填写公开播放列表地址。首次只取列表第一条，请确保列表按最新内容排序。':'填写公开视频页面或可直接播放的音视频链接；下载能力取决于来源。'}</p>
+          <label className="creator-check"><input type="checkbox" checked={form.autoGenerate} onChange={event=>setForm(old=>({...old,autoGenerate:event.target.checked,autoPublish:event.target.checked?old.autoPublish:false}))}/><span>发现新资源后自动制作精听课程</span></label>
+          <label className="creator-check"><input type="checkbox" checked={form.autoPublish} disabled={!form.autoGenerate} onChange={event=>updateForm('autoPublish',event.target.checked)}/><span>制作与质量检查通过后自动投稿 B站</span></label>
+          {form.autoPublish&&<div className="creator-auto-settings"><p>仅对这个订阅生效。待检查课程、旧版本成片或提交结果不明的稿件会停止自动发布。</p><label className="creator-check"><input type="checkbox" required checked={form.rights} onChange={event=>updateForm('rights',event.target.checked)}/><span>我确认拥有这个来源素材的公开发布权利</span></label><div className="creator-fields"><label>分区编号<input inputMode="numeric" value={form.tid} onChange={event=>updateForm('tid',event.target.value)}/></label><label>标签（逗号分隔）<input value={form.tags} onChange={event=>updateForm('tags',event.target.value)}/></label></div><label>投稿简介<textarea rows={3} maxLength={2000} value={form.description} onChange={event=>updateForm('description',event.target.value)} placeholder="填写课程特点；原始来源会单独记录。"/></label></div>}
+          <button className="creator-primary" type="submit">{isBusy('source-form')?'正在保存…':'添加资源订阅'}</button>
+        </fieldset></form>
+        <div className="creator-list" aria-label="已保存的资源订阅" aria-busy={loading}>{!sources.length?<p className="creator-empty">{loading?'正在读取订阅…':'尚未添加订阅。现有学习任务和成品保持原样。'}</p>:sources.map(source=><article className="creator-resource" key={source.id}><div className="creator-row-heading"><h4>{source.name}</h4><span className={`creator-status ${source.enabled?'on':'off'}`}>{source.enabled?'已开启':'已暂停'}</span></div><a className="creator-source-url" href={externalUrl(source.url)} target="_blank" rel="noreferrer">{source.url}</a><p className="creator-meta">{sourceModes[source.mode]} · 每 {source.interval_minutes} 分钟 · {source.auto_publish?'制作后自动投稿':source.auto_generate?'自动制作':'只发现资源'}</p><p className="creator-meta">上次检查：{checkedTime(source.last_checked)}</p>{source.error&&<p className="creator-inline-error">{source.error}</p>}<div className="creator-actions"><button type="button" disabled={isBusy('source-'+source.id)} onClick={()=>void run('source-'+source.id,async()=>{await request(`/api/workflows/${encodeURIComponent(source.id)}/scan`,{});setNotice('来源检查完成。新资源和制作状态已在列表中更新。');await refresh();})}>{isBusy('source-'+source.id)?'正在处理…':'立即检查'}</button><button type="button" disabled={isBusy('source-'+source.id)} onClick={()=>void toggleSource(source)}>{source.enabled?'暂停订阅':'恢复订阅'}</button><button className="creator-text-button" type="button" disabled={isBusy('source-'+source.id)} onClick={()=>void run('source-'+source.id,async()=>{await request(`/api/workflows/${encodeURIComponent(source.id)}/delete`,{});setNotice('订阅已删除，已生成的学习包仍保留。');await refresh();})}>删除订阅</button></div>{!!source.items?.length&&<details className="creator-resource-items"><summary>最近发现 {source.items.length} 条</summary><ul>{source.items.slice(0,8).map(item=><li key={item.id}><a href={externalUrl(item.url)} target="_blank" rel="noreferrer">{item.title}</a><small>{statusNames[item.status]||item.status}</small>{item.error&&<small className="creator-error">{item.error}</small>}<button type="button" disabled={!!item.job_id||item.status!=='discovered'||isBusy('item-'+source.id+'-'+item.id)} onClick={()=>void run('item-'+source.id+'-'+item.id,async()=>{await request(`/api/workflows/${encodeURIComponent(source.id)}/${encodeURIComponent(item.id)}/generate`,{});setNotice('资源已加入制作队列，可在“制作与待检查”中查看进度。');await refresh();})}>{item.job_id?'已加入制作':isBusy('item-'+source.id+'-'+item.id)?'正在添加…':'制作这条资源'}</button></li>)}</ul></details>}</article>)}</div>
+      </section>
+      <section className="creator-panel" aria-labelledby="publish-heading"><div className="creator-panel-heading"><div><small>02 · PUBLISH</small><h3 id="publish-heading">准备 B站投稿</h3></div><span className={`creator-status ${account?.configured?'on':'off'}`}>{account?.configured?'登录信息已保存':'未连接 B站'}</span></div>
+        <div className="creator-account"><p>{account?.adapter_available?'扫码仅用于 B站投稿，登录信息加密保存在本机。':'本机暂未启用直接投稿连接。仍可准备草稿，导出投稿包后在官方创作中心上传。'}</p>{account?.configured&&!account.live_submission_verified&&<p className="creator-hint">保存登录信息不代表投稿成功；以返回的稿件编号和创作中心记录为准。</p>}<div className="creator-actions"><button type="button" disabled={!account?.adapter_available||isBusy('account')} onClick={()=>void startLogin()}>{isBusy('account')?'正在处理…':account?.configured?'重新扫码':'扫码连接 B站'}</button>{account?.configured&&<button type="button" disabled={isBusy('account')} onClick={()=>void run('account',async()=>{await request('/api/publishing/disconnect',{});setLogin(null);setNotice('本机 B站登录信息已移除，学习配置不受影响。');await refresh();})}>断开连接</button>}<a href={creatorUrl} target="_blank" rel="noreferrer">官方创作中心 ↗</a></div>
+          {login&&<div className="creator-qr"><strong>{loginNames[login.status]||'等待 B站确认扫码状态'}</strong>{!loginFinished&&/^(data:image\/(?:png|jpeg|webp);base64,)/i.test(login.qr_image||login.qr_data||'')&&<img src={login.qr_image||login.qr_data} width={180} height={180} alt="B站登录二维码"/>}{!loginFinished&&!/^(data:image\/(?:png|jpeg|webp);base64,)/i.test(login.qr_image||login.qr_data||'')&&<p>二维码尚未就绪，请重新获取或使用官方创作中心。</p>}{loginError&&<p className="creator-inline-error" role="status">{loginError}</p>}<button className="creator-text-button" type="button" onClick={()=>{setLogin(null);setLoginError('');}}>收起二维码</button></div>}
+        </div>
+        <form onSubmit={event=>void prepareDraft(event)}><fieldset disabled={isBusy('draft-form')}><legend className="creator-sr-only">课程投稿信息</legend>
+          <label>选择已制作课程<select required value={episodeId} onChange={event=>chooseEpisode(event.target.value)}><option value="">请选择一份学习课程</option>{episodes.map(item=><option key={item.id} value={item.id}>{item.title_zh||item.title}</option>)}</select></label>
+          <label>投稿标题<input value={draftTitle} onChange={event=>setDraftTitle(event.target.value)} maxLength={80} placeholder={selectedEpisode?.title_zh||selectedEpisode?.title||'选择课程后填写，最多 80 个字符'}/></label>
+          <div className="creator-fields"><label>稿件类型<select value={draftCopyright} onChange={event=>setDraftCopyright(Number(event.target.value))}><option value={2}>转载</option><option value={1}>自制</option></select></label><label>分区编号<input inputMode="numeric" value={draftTid} onChange={event=>setDraftTid(event.target.value)}/></label></div>
+          <label>原始来源{draftCopyright===2?'（转载必填）':'（选填）'}<input type="url" maxLength={200} value={draftSource} onChange={event=>setDraftSource(event.target.value)} placeholder="原作者的视频或节目地址；留空会读取课程来源"/></label>
+          <label>标签（逗号分隔）<input value={draftTags} onChange={event=>setDraftTags(event.target.value)} placeholder="英语学习,精听"/></label>
+          <label>投稿简介<textarea value={draftDescription} onChange={event=>setDraftDescription(event.target.value)} rows={3} maxLength={2000} placeholder="课程要点、原作者及来源说明"/></label>
+          <label className="creator-check"><input type="checkbox" checked={draftRights} onChange={event=>setDraftRights(event.target.checked)}/><span>我确认拥有这份素材的公开发布权利</span></label>
+          <p className="creator-hint">添加字幕不会自动获得转载许可。草稿会检查待听辨问题、精听成片和课程版本，避免发布未完成或过期的视频。</p>
+          <button className="creator-primary" type="submit" disabled={!episodeId}>{isBusy('draft-form')?'正在准备…':'准备投稿草稿'}</button>
+        </fieldset></form>
+      </section>
+    </div>
+    <section className="creator-panel creator-publications" aria-labelledby="publications-heading"><div className="creator-panel-heading"><div><small>03 · TRACK</small><h3 id="publications-heading">投稿记录</h3></div><span>{jobs.length} 条记录 · 每 5 秒更新</span></div><p className="creator-description">本地准备、正在提交、取得稿件编号分别显示；发布后的转码与审核请在官方创作中心查看。</p>
+      {!jobs.length?<p className="creator-empty">{loading?'正在读取投稿记录…':'还没有投稿草稿。准备好课程后，先在上方选择课程。'}</p>:<div className="creator-publication-list">{jobs.map(job=>{const blocked=job.status==='blocked'||!!job.blockers?.length,locked=['submitting','published','uncertain'].includes(job.status)||!!job.attempted_at,bundle=downloadUrl(job),jobBusy=isBusy('publication-'+job.id);return <article className="creator-publication" key={job.id}><div className="creator-row-heading"><h4>{job.title}</h4><span className={`creator-status ${job.status==='published'?'on':blocked||job.status==='uncertain'?'attention':''}`}>{statusNames[job.status]||job.status}</span></div><p className="creator-meta">{job.copyright===2?'转载':'自制'} · 分区 {job.tid} · {job.tags.join(' / ')}{job.auto_publish?' · 订阅自动投稿':''}</p>{!!job.blockers?.length&&<ul className="creator-blockers">{job.blockers.map((reason,index)=><li key={index}>{reason}</li>)}</ul>}{job.error&&<p className="creator-inline-error">{job.error}</p>}{job.status==='uncertain'&&<p className="creator-uncertain">本次请求可能已被 B站接收。请打开创作中心核对，避免重复投稿；系统不会自动重投这条记录。</p>}{blocked&&<p className="creator-hint">处理上述事项后，重新准备草稿以使用最新课程和成片。</p>}<div className="creator-actions"><button className="creator-primary" type="button" disabled={jobBusy||blocked||locked||!account?.configured||!account?.adapter_available} onClick={()=>void publicationAction(job,'submit')}>{jobBusy?'正在处理…':job.status==='submitting'?'正在提交…':'一键投稿 B站'}</button><button type="button" disabled={jobBusy||blocked||job.status==='submitting'} onClick={()=>void publicationAction(job,'bundle')}>生成投稿包</button>{bundle&&<a href={bundle} download>下载投稿包 ↓</a>}{externalUrl(job.url)&&<a href={externalUrl(job.url)} target="_blank" rel="noreferrer">查看稿件 ↗</a>}<a href={creatorUrl} target="_blank" rel="noreferrer">创作中心 ↗</a></div><details className="creator-metadata"><summary>标题、简介与来源</summary><div className="creator-actions"><button type="button" disabled={isBusy('copy-title-'+job.id)} onClick={()=>void copy(job.title,'copy-title-'+job.id)}>复制标题</button><button type="button" disabled={isBusy('copy-description-'+job.id)} onClick={()=>void copy([job.description,job.source?'原始来源：'+job.source:''].filter(Boolean).join('\n\n'),'copy-description-'+job.id)}>复制简介与来源</button></div><p><b>标题</b>{job.title}</p><p><b>简介</b>{job.description||'尚未填写'}</p>{job.source&&<p><b>来源</b>{job.source}</p>}<small>更新于 {checkedTime(job.updated_at)}</small></details></article>;})}</div>}
+    </section>
+  </section>;
+}
+
+export default CreatorStudio;

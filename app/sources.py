@@ -15,6 +15,7 @@ import ipaddress
 import json
 import os
 import re
+import shutil
 import socket
 import ssl
 import subprocess
@@ -381,6 +382,8 @@ def _youtube_metadata(url: str, progress=None, *, flat: bool = False) -> dict:
     command = [sys.executable, "-m", "yt_dlp", "--ignore-config", "--no-cache-dir", "--no-warnings",
                "--dump-single-json", "--skip-download", "--socket-timeout", "20", "--retries", "1",
                "--extractor-retries", "1", "--no-playlist", "--use-extractors", "youtube.*"]
+    if shutil.which('node'):
+        command += ['--js-runtimes', 'node']
     if flat:
         command += ["--flat-playlist", "--playlist-end", "50"]
     command += [_youtube_target(url)]
@@ -599,7 +602,8 @@ def _acquire_youtube(url: str, folder: Path, progress, max_video_height: int | N
                     break
     cover = _optional_download(value.get("thumbnail", ""), folder / "source-cover.jpg", progress, "image")
     return {"media_path": str(media), "title": value.get("title") or "YouTube 视频", "source_kind": "youtube", "source_url": url,
-            "subtitle_path": subtitle, "cover_path": cover, "transcript_kind": transcript_kind}
+            "subtitle_path": subtitle, "cover_path": cover, "transcript_kind": transcript_kind,
+            "source_metadata": {key: str(value.get(key) or '')[:500] for key in ('title', 'uploader', 'channel', 'license', 'upload_date')}}
 
 
 def _acquire_bili(url: str, folder: Path, progress) -> dict:

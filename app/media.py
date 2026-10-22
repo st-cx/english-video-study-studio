@@ -175,6 +175,8 @@ def _publish(staged: Path, folder: Path, names: list[str]) -> None:
         for name in names:
             destination = folder / name
             backup = staged / ("previous-" + name)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            backup.parent.mkdir(parents=True, exist_ok=True)
             if destination.is_file():
                 os.replace(destination, backup)
                 previous.append((destination, backup))

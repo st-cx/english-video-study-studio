@@ -144,6 +144,10 @@ def _study_ready(package, folder):
     return ready and (folder / 'study.html').is_file()
 
 
+def _package_provider(episode_id):
+    return _read_package(episode_id), _package_file(episode_id).parent
+
+
 def _job_row(row):
     data = dict(row)
     result = {key: data.get(key) for key in ('id', 'episode_id', 'title', 'status', 'stage', 'progress', 'message', 'error', 'created_at', 'updated_at')}
@@ -425,7 +429,7 @@ def recover_saved_jobs():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'EnglishVideoStudio/0.5.2'
+    server_version = 'EnglishVideoStudio/0.6.0'
 
     def log_message(self, fmt, *args):
         LOG.info('%s %s', self.command, urlparse(self.path).path)
@@ -487,13 +491,22 @@ class Handler(BaseHTTPRequestHandler):
             route = urlparse(self.path)
             if route.path == '/api/status':
                 settings = get_settings()
-                return self._json(200, {'name': '英语视频学习工作室', 'kind': 'universal', 'version': '0.5.2',
+                return self._json(200, {'name': '英语视频学习工作室', 'kind': 'universal', 'version': '0.6.0',
                                         'api_key_configured': has_api_key(), 'model': settings['model'], 'base_url': settings['base_url'],
                                         'daily_check_enabled': False, 'chunk_size': CHUNK_SIZE, 'max_media_size': MAX_MEDIA_SIZE})
             if route.path == '/api/jobs':
                 return self._json(200, list_jobs())
             if route.path == '/api/episodes':
                 return self._json(200, all_episodes())
+            if route.path == '/api/workflows':
+                from .workflows import list_sources
+                return self._json(200, {'sources': list_sources()})
+            if route.path == '/api/publishing':
+                from .publishing import public_state, list_publications
+                return self._json(200, {'account': public_state(), 'jobs': list_publications()})
+            if route.path == '/api/review-feedback':
+                from .issue_review import feedback
+                return self._json(200, feedback(_read_package(parse_qs(route.query).get('episode_id', [''])[0])))
             if route.path == '/api/episode':
                 return self._json(200, _private_value(_read_package(parse_qs(route.query).get('id', [''])[0])))
             preview = re.fullmatch(r'/api/uploads/([a-f0-9]{32})/preview', route.path)
@@ -515,6 +528,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self._guard(True)
             path, body = urlparse(self.path).path, self._body()
+            if path.startswith(('/api/workflows', '/api/publishing', '/api/review-feedback')):
+                return self._creator_post(path, body)
             if path == '/api/settings':
                 return self._save_settings(body)
             if path == '/api/sources/inspect':
@@ -558,6 +573,40 @@ class Handler(BaseHTTPRequestHandler):
             return self._upload_chunk(match.group(1))
         except Exception as exc:
             return self._dispatch_error(exc)
+
+    def _creator_post(self, path, body):
+        from . import publishing, workflows
+        try:
+            if path == '/api/review-feedback':
+                from .issue_review import save_feedback
+                return self._json(200, save_feedback(_read_package(body.get('episode_id', '')), body))
+            if path == '/api/workflows':
+                return self._json(200, workflows.save_source(body))
+            item_match = re.fullmatch(r'/api/workflows/([a-f0-9]{32})/([a-f0-9]{24})/generate', path)
+            if item_match:
+                return self._json(202, workflows.enqueue_item(item_match[1], item_match[2], _enqueue))
+            match = re.fullmatch(r'/api/workflows/([a-f0-9]{32})/(scan|delete)', path)
+            if match:
+                value = workflows.delete_source(match[1]) if match[2] == 'delete' else workflows.scan_source(match[1], _enqueue)
+                return self._json(200, value)
+            if path == '/api/publishing/login':
+                return self._json(200, publishing.start_login())
+            if path == '/api/publishing/login/poll':
+                return self._json(200, publishing.poll_login(str(body.get('login_id', ''))))
+            if path == '/api/publishing/disconnect':
+                return self._json(200, publishing.disconnect())
+            if path == '/api/publishing/drafts':
+                package, folder = _package_provider(body.get('episode_id', ''))
+                return self._json(200, publishing.prepare_publication(package, folder, body.get('options', {})))
+            match = re.fullmatch(r'/api/publishing/([a-f0-9]{32})/(submit|bundle)', path)
+            if match:
+                action = publishing.submit_publication if match[2] == 'submit' else publishing.export_publication_bundle
+                return self._json(202 if match[2] == 'submit' else 200, action(match[1], package_provider=_package_provider))
+            raise APIError(404, '找不到这个创作操作。')
+        except APIError:
+            raise
+        except (ValueError, RuntimeError) as exc:
+            raise APIError(409, str(exc)) from exc
 
     def _save_settings(self, body):
         settings, updates = get_settings(), {}
@@ -889,6 +938,10 @@ def serve(port=8775, open_browser=False):
         raise RuntimeError(f'无法使用本地端口 {port}，请关闭已有窗口或选择其他端口。') from exc
     http.daemon_threads = True
     recover_saved_jobs()
+    from .publishing import recover_publications
+    from .workflows import run_background
+    recover_publications()
+    workflow_stop = run_background(_enqueue, _get_job, _package_provider)
     if open_browser:
         import webbrowser
         threading.Timer(1, lambda: webbrowser.open(f'http://127.0.0.1:{port}/')).start()
@@ -898,4 +951,5 @@ def serve(port=8775, open_browser=False):
     except KeyboardInterrupt:
         pass
     finally:
+        workflow_stop.set()
         http.server_close()
