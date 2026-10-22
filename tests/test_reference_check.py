@@ -123,6 +123,13 @@ class ReferenceCheckTests(unittest.TestCase):
         self.assertEqual(reference_issues(words('The p sets are useful.'), 'The psets are useful.'), [])
         self.assertTrue(reference_issues(words('The p set is useful.'), 'The psets are useful.'))
 
+    def test_yea_yay_is_only_explicit_interjection_spelling_not_yeah_or_yes(self):
+        self.assertEqual(reference_issues(words('Okay. Yay. Okay.'), 'Yea.'), [])
+        self.assertTrue(reference_issues(words('Yay.'), 'Yeah.'))
+        self.assertTrue(reference_issues(words('Yay.'), 'Yes.'))
+        self.assertTrue(reference_issues(words('Yeah.'), 'Yea.'))
+        self.assertTrue(reference_issues(words('Yay, we lost.'), 'Yea, we won.'))
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -1,7 +1,7 @@
 """Import spoken English from common subtitle/document formats.
 
-Only overlapping rolling captions are deduplicated. Repeated dialogue in
-separate time spans, hesitations and repeated words remain in the transcript.
+Overlapping rolling captions and explicitly timestamped display carryover are
+deduplicated. Separate dialogue, hesitations and repeated spoken words remain.
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from pathlib import Path
 SUPPORTED_SUBTITLE_SUFFIXES = {".srt", ".vtt", ".ass", ".ssa", ".txt", ".pdf"}
 _STAMP = r"(?:\d{1,3}:)?\d{1,2}:\d{2}[.,]\d{1,3}"
 _TIMING = re.compile(rf"^\s*({_STAMP})\s*-->\s*({_STAMP})(?:\s+.*)?$")
+_INLINE_TIMING = re.compile(rf"<({_STAMP})>")
 _STAGE_LABEL = re.compile(
     r"(?:(?:soft|background|instrumental|audience)\s+)?"
     r"(?:music(?:\s+playing)?|laughter|laughing|laughs?|applause|applauding|clapping|"
@@ -109,11 +110,12 @@ def _deduplicate_cues(cues: list[dict], *, rolling: bool = False) -> list[dict]:
         item = dict(cue)
         if result:
             previous = result[-1]
-            if previous["start_ms"] == item["start_ms"] and previous["end_ms"] == item["end_ms"] and previous["text"] == item["text"]:
+            if (previous["start_ms"] == item["start_ms"] and previous["end_ms"] == item["end_ms"]
+                    and previous["text"] == item["text"] and previous.get('speaker', '') == item.get('speaker', '')):
                 continue
             # Only time-overlapping rolling cues can contain already spoken
             # context. Do not globally remove naturally repeated dialogue.
-            if rolling and item["start_ms"] < previous["end_ms"]:
+            if rolling and item.get('speaker', '') == previous.get('speaker', '') and item["start_ms"] < previous["end_ms"]:
                 old_words, new_words = previous["text"].split(), item["text"].split()
                 for count in range(min(len(old_words), len(new_words)), 0, -1):
                     if old_words[-count:] == new_words[:count]:
@@ -130,6 +132,47 @@ def _deduplicate_cues(cues: list[dict], *, rolling: bool = False) -> list[dict]:
     return result
 
 
+def _remove_vtt_display_carryover(cues: list[dict]) -> list[dict]:
+    """Remove only raw-line carryover proven by WebVTT inline timestamps.
+
+    YouTube often emits a ten-millisecond hold cue between two adjacent
+    captions. Its old line appears again above a newly timestamped line. Those
+    cues do not overlap in time, so output-only overlap matching cannot identify
+    them safely. Compare the ORIGINAL displayed lines, including discarded hold
+    cues, and never infer word times or remove a newly timestamped repetition.
+    """
+    result, previous = [], None
+    for raw in cues:
+        item = {key: value for key, value in raw.items() if not key.startswith('_')}
+        lines, timed = raw['_display_lines'], raw['_timed_lines']
+        adjacent = (previous is not None and previous['end_ms'] == raw['start_ms']
+                    and previous.get('speaker', '') == raw.get('speaker', ''))
+        if adjacent:
+            old = previous['_display_lines']
+            # A very short, untimestamped redisplay of the previous active line
+            # cannot add speech. A timestamp on that line would be new evidence
+            # and must be retained, even when its wording is identical.
+            hold = (0 < raw['end_ms'] - raw['start_ms'] <= 50
+                    and len(lines) == 1 and not any(timed)
+                    and (previous['_valid_inline'] or previous.get('_rolling_active'))
+                    and old and lines[0] == old[-1])
+            if hold:
+                raw['_proven_hold'] = True
+                previous = raw
+                continue
+            if (raw['_valid_inline'] or not any(timed) and previous.get('_proven_hold')) and len(lines) > 1:
+                for count in range(min(len(old), len(lines) - 1), 0, -1):
+                    if (not any(timed[:count]) and (any(timed[count:]) or previous.get('_proven_hold'))
+                            and old[-count:] == lines[:count]):
+                        item['text'] = ' '.join(lines[count:])
+                        raw['_rolling_active'] = True
+                        break
+        if item['text']:
+            result.append(item)
+        previous = raw
+    return result
+
+
 def _timed_text(text: str, *, rolling: bool = False) -> list[dict]:
     lines = text.replace("\r\n", "\n").replace("\r", "\n").splitlines()
     cues = []
@@ -141,7 +184,16 @@ def _timed_text(text: str, *, rolling: bool = False) -> list[dict]:
         if end <= start:
             raise ValueError(f"字幕第 {index + 1} 行结束时间没有晚于开始时间。")
         body, cursor = [], index + 1
-        while cursor < len(lines) and lines[cursor].strip() and not _TIMING.match(lines[cursor]):
+        while cursor < len(lines) and not _TIMING.match(lines[cursor]):
+            if not lines[cursor].strip():
+                # YouTube represents an empty first display row by one space,
+                # followed by its timestamped active row. A genuine empty line
+                # remains the cue delimiter; do not absorb the next cue ID.
+                if (rolling and lines[cursor] and cursor + 1 < len(lines)
+                        and _INLINE_TIMING.search(lines[cursor + 1])):
+                    cursor += 1
+                    continue
+                break
             # Index numbers immediately preceding another timing line are
             # metadata, even in files without a blank separator.
             if lines[cursor].strip().isdigit() and cursor + 1 < len(lines) and _TIMING.match(lines[cursor + 1]):
@@ -149,12 +201,23 @@ def _timed_text(text: str, *, rolling: bool = False) -> list[dict]:
             body.append(lines[cursor])
             cursor += 1
         body, speaker = _speaker_metadata(body)
-        cue = {"start_ms": start, "end_ms": end, "text": _join_rolling_lines(body, rolling=rolling)}
+        # Plain VTT line wrapping can be genuine repetition. Inline timestamp
+        # evidence is handled with original cue context below, not by globally
+        # deleting identical lines within every VTT caption.
+        cue = {"start_ms": start, "end_ms": end, "text": _join_rolling_lines(body)}
         if speaker:
             cue['speaker'] = speaker
+        if rolling:
+            displayed = [(raw, _clean_line(raw)) for raw in body if _clean_line(raw)]
+            stamps = [_milliseconds(match[1]) for raw, _ in displayed for match in _INLINE_TIMING.finditer(raw)]
+            cue.update(_display_lines=[cleaned for _, cleaned in displayed],
+                       _timed_lines=[bool(_INLINE_TIMING.search(raw)) for raw, _ in displayed],
+                       _valid_inline=bool(stamps) and all(start <= stamp <= end for stamp in stamps))
         cues.append(cue)
     if not cues and text.strip() and re.search(r"\d\s*-->", text):
         raise ValueError("未找到可读取的字幕时间，支持 SRT／WebVTT 标准时间格式。")
+    if rolling:
+        cues = _remove_vtt_display_carryover(cues)
     return _deduplicate_cues(cues, rolling=rolling)
 
 

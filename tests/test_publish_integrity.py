@@ -39,6 +39,7 @@ class PublishIntegrityTests(unittest.TestCase):
         self.base = Path(self.temporary.name)
         self.folder = self.base / "episode"
         self.folder.mkdir()
+        (self.folder / 'audio.mp3').write_bytes(b'fixture source audio')
         # Standalone static assets keep tests independent of an npm build.
         self.runtime = self.base / "runtime"
         assets = self.runtime / "dist" / "offline"
@@ -55,7 +56,7 @@ class PublishIntegrityTests(unittest.TestCase):
         previous["artifacts"] = {"study": "ready", "video": "ready"}
         previous["render"]["status"] = "ready"
         storage.save_episode(previous, self.folder)
-        for name in ("study.html", "lesson.mp4", "subtitles.en.srt", "subtitles.zh.srt", "captions.ass", "study-notes.md", "vocabulary.csv"):
+        for name in ("study.html", "lesson.mp4", "lesson.mp4.manifest.json", "subtitles.en.srt", "subtitles.zh.srt", "captions.ass", "study-notes.md", "vocabulary.csv"):
             (self.folder / name).write_bytes(("previous content: " + name).encode())
         return {path.name: path.read_bytes() for path in self.folder.iterdir() if path.is_file()}
 
@@ -84,7 +85,7 @@ class PublishIntegrityTests(unittest.TestCase):
         candidate = episode_package()
         storage.save_episode(candidate, self.folder)
         package_path = self.folder / "episode.json"
-        previous = {name: (self.folder / name).read_bytes() for name in ("lesson.mp4", "study.html", "episode.json")}
+        previous = {name: (self.folder / name).read_bytes() for name in ("lesson.mp4", "lesson.mp4.manifest.json", "study.html", "episode.json")}
         cli = self.runtime / "node_modules" / "@remotion" / "cli" / "remotion-cli.js"
         cli.parent.mkdir(parents=True)
         cli.write_text("fixture", encoding="utf-8")

@@ -34,6 +34,11 @@ def _positive(word: dict) -> bool:
     return word['start_ms'] >= 0 and word['end_ms'] > word['start_ms']
 
 
+def _large_zero_shift(before: dict, observed: dict) -> bool:
+    return (before['end_ms'] <= before['start_ms']
+            and max(abs(before[key]-observed[key]) for key in ('start_ms', 'end_ms')) > 1200)
+
+
 _WEAK_FUNCTION_WORDS = {'a','an','the','to','of','and','or','in','on','at','as','for','by','with','from',
                         'is','am','are','was','were','be','been','being','it','that'}
 
@@ -73,15 +78,25 @@ def _contextual_matches(expected: list[dict], observed: list[dict]) -> dict[int,
     for block in matcher.get_matching_blocks():
         if block.size < 3:
             continue
-        anchors = sum(_positive(expected[block.a+j]) and _positive(observed[block.b+j])
-                      and max(abs(expected[block.a+j][key]-observed[block.b+j][key])
-                              for key in ('start_ms', 'end_ms')) <= 650
-                      for j in range(block.size))
-        if anchors < 2:
+        anchors = [j for j in range(block.size)
+                   if _positive(expected[block.a+j]) and _positive(observed[block.b+j])
+                   and max(abs(expected[block.a+j][key]-observed[block.b+j][key])
+                           for key in ('start_ms', 'end_ms')) <= 650]
+        if len(anchors) < 2:
             continue
         for j in range(block.size):
             candidate = observed[block.b+j]
             if _positive(candidate):
+                if _large_zero_shift(expected[block.a+j], candidate):
+                    # Two anchors elsewhere in a long matching sentence do not
+                    # corroborate an isolated word hallucinated in its silence.
+                    # Require the candidate's actual acoustic neighbourhood;
+                    # spelling confidence alone cannot bridge several seconds.
+                    nearby = sum(max(candidate['start_ms']-observed[block.b+k]['end_ms'],
+                                     observed[block.b+k]['start_ms']-candidate['end_ms'], 0) <= 650
+                                 for k in anchors if k != j)
+                    if nearby < 2:
+                        continue
                 mapping[block.a+j] = dict(candidate)
     return mapping
 
@@ -264,8 +279,15 @@ def align_words(audio: Path, recognized: list[dict], model_path: str, progress,
                 proposed.update({i-1:left,i:right})
     # Apply the same protection to an initial ASR fallback, not only to a
     # contextual retry; both are observations from the same attention timing.
+    contextual = _contextual_matches(words, recognized)
     for i in list(proposed):
-        if _weak_shift_requires_independent_acoustics(words[i],proposed[i]):
+        if _large_zero_shift(words[i], proposed[i]) and i not in contextual:
+            source = proposed.pop(i)
+            disputed.append({'word_index': i, 'text': words[i]['text'],
+                             'aligned_ms': [words[i]['start_ms'], words[i]['end_ms']],
+                             'asr_ms': [source['start_ms'], source['end_ms']],
+                             'reason': 'unanchored_large_zero_duration_asr_shift_requires_contextual_remeasurement'})
+        elif _weak_shift_requires_independent_acoustics(words[i],proposed[i]):
             source=proposed.pop(i)
             disputed.append({'word_index':i,'text':words[i]['text'],
                              'aligned_ms':[words[i]['start_ms'],words[i]['end_ms']],

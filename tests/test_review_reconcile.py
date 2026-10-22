@@ -6,8 +6,9 @@ from unittest.mock import patch
 
 from app.acoustic_reference import reference_issue_key, reference_words_fingerprint
 from app.review_reconcile import (
-    _apply_duplicate, _boundary_support, _duplicate_repair, _orthographic_repair,
-    inventory, rebind_ctc_sources, reconcile_reviews,
+    _apply_duplicate, _boundary_support, _cross_boundary_evidence, _duplicate_repair,
+    _orthographic_repair, _substitution_retention, inventory, merge_ctc_sources,
+    rebind_ctc_sources, reconcile_reviews,
 )
 from app.sync_audit import normalize_ctc
 
@@ -53,12 +54,139 @@ def duplicate_fixture():
 
 
 class ReviewReconcileTests(unittest.TestCase):
+    def test_resume_batches_join_only_same_audio_model_and_complete_word_clock(self):
+        package, issue, observations, source = duplicate_fixture()
+        source.update(source='independent_full_context_ctc_likelihood',
+                      input_words_fingerprint_version='text-time-1')
+        left, right = copy.deepcopy(source), copy.deepcopy(source)
+        left['rows'][0]['windows'] = source['rows'][0]['windows'][:1]
+        left['rows'][0]['untrusted_saved_approval'] = True
+        right['rows'][0]['windows'] = source['rows'][0]['windows'][1:]
+        result = merge_ctc_sources([left, right, left], package['words'], 'a' * 64)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(len(result[0]['rows'][0]['windows']), 2)
+        self.assertEqual(len(result[0]['merged_from_sha256']), 2)
+        self.assertNotIn('untrusted_saved_approval', result[0]['rows'][0])
+        stale = copy.deepcopy(right)
+        stale['input_words_sha256'] = 'f' * 64
+        wrong_audio = copy.deepcopy(right)
+        wrong_audio['audio_sha256'] = 'f' * 64
+        other_model = copy.deepcopy(right)
+        other_model['model_sha256'] = 'c' * 64
+        result = merge_ctc_sources([left, stale, wrong_audio, other_model], package['words'], 'a' * 64)
+        self.assertEqual(sorted(len(x['rows'][0]['windows']) for x in result), [1, 1])
+
+    def test_resume_batches_reject_conflicting_copies_of_the_same_crop(self):
+        package, issue, observations, source = duplicate_fixture()
+        source.update(source='independent_full_context_ctc_likelihood',
+                      input_words_fingerprint_version='text-time-1')
+        altered = copy.deepcopy(source)
+        altered['rows'][0]['windows'][0]['comparison']['observations'][0]['text'] = 'tampered'
+        result = merge_ctc_sources([source, altered, source], package['words'], 'a' * 64)
+        self.assertEqual(len(result[0]['rows'][0]['windows']), 1)
+        self.assertEqual(result[0]['rows'][0]['windows'][0]['clip_start_ms'], 100)
+
     def test_duplicate_requires_distinct_models_and_real_raw_comparisons(self):
         package, issue, observations, source = duplicate_fixture()
         self.assertIsNotNone(_duplicate_repair(package, issue, observations, [source], 'a' * 64))
         self.assertIsNone(_duplicate_repair(package, issue, observations[:1] * 2, [source], 'a' * 64))
         source['rows'][0]['windows'] = source['rows'][0]['windows'][:1]
         self.assertIsNone(_duplicate_repair(package, issue, observations, [source], 'a' * 64))
+
+    def test_sequence_matcher_can_mark_first_duplicate_but_earlier_id_is_retained(self):
+        package, issue, observations, source = duplicate_fixture()
+        issue.update(start_ms=package['words'][4]['start_ms'], end_ms=package['words'][4]['end_ms'])
+        source['rows'][0].update(**issue, issue_key=reference_issue_key(issue), global_word_indices=[4])
+        repair = _duplicate_repair(package, issue, observations, [source], 'a' * 64)
+        self.assertIsNotNone(repair)
+        self.assertEqual((repair['removed_word_id'], repair['retained_word_id']), ('5', '4'))
+
+    def test_current_boundary_follows_exact_retained_id_revision_not_nearest_word(self):
+        words = [{'id': '0', 'text': 'we', 'start_ms': 1500, 'end_ms': 1700},
+                 {'id': '1', 'text': 'read', 'start_ms': 2000, 'end_ms': 2300},
+                 {'id': '2', 'text': 'books', 'start_ms': 2500, 'end_ms': 2900}]
+        row = {'text': 'read', 'details': {'aligned_ms': [8000, 8300]}}
+        survey = {'audio_sha256': 'a' * 64, 'model_sha256': 'b' * 64, 'windows': []}
+        for begin in (0, 100):
+            survey['windows'].append({'start_ms': begin, 'end_ms': begin + 10000,
+                'aligned': [{**w, 'path_score_not_accuracy': .99} for w in words],
+                'greedy_words': copy.deepcopy(words)})
+        package = {'words': words, 'processing': {'timing_revision_history': [
+            {'patches': [{'word_id': '1', 'text': 'read', 'before_ms': [8000, 8300], 'after_ms': [2000, 2300]}]}]}}
+        self.assertIsNotNone(_boundary_support(package, row, [survey], 'a' * 64))
+        package['processing'] = {}
+        self.assertIsNone(_boundary_support(package, row, [survey], 'a' * 64))
+
+    def test_cross_model_relocation_requires_raw_old_new_scores_and_two_models(self):
+        texts = ['to', 'the', 'console.', 'So', "that's"]
+        spans = [(1500, 1700), (1800, 1950), (9000, 9500), (11000, 11200), (11300, 11700)]
+        words = [dict(id=str(i), sentence_id='s', text=t, start_ms=a, end_ms=b)
+                 for i, (t, (a, b)) in enumerate(zip(texts, spans))]
+        issue = {'text': 'console.', 'start_ms': 4000, 'end_ms': 9500,
+                 'details': {'aligned_ms': [9000, 9500], 'asr_ms': [4000, 4500]}}
+        observations = []
+        for name in ('b', 'c'):
+            measured = [{**w, 'probability': .99} for w in words]
+            measured[2].update(start_ms=4000, end_ms=4500)
+            observations.append({'observation_id': name * 64, 'model_fingerprint': name * 64,
+                'audio_sha256': 'a' * 64, 'mode': 'independent_unprompted_asr',
+                'start_ms': 0, 'end_ms': 14000, 'words': measured})
+        survey = {'audio_sha256': 'a' * 64, 'model_sha256': 'd' * 64, 'windows': []}
+        for begin in (0, 100):
+            aligned = [{**w, 'path_score_not_accuracy': .2} for w in words]
+            aligned[2].update(start_ms=4000, end_ms=4500)
+            intervals = {}
+            for key, bounds, nll in [('before', [9000, 9500], 1000), ('after', [4000, 4500], 100)]:
+                intervals[key] = {'interval_ms': bounds, 'negative_log_likelihood': nll,
+                    'frame_count': 35, 'target_token_count': 7, 'nll_per_frame': nll / 35,
+                    'nll_per_target_token': nll / 7}
+            survey['windows'].append({'start_ms': begin, 'end_ms': begin + 14000, 'aligned': aligned,
+                'emissions_sha256': 'e' * 64, 'interval_comparisons': [{
+                    'algorithm': 'same-target-two-interval-ctc-nll-v1', 'word_id': '2', 'text': 'console.',
+                    'before_ms': [9000, 9500], 'after_ms': [4000, 4500], 'padding_ms': 100,
+                    'emissions_sha256': 'e' * 64, 'intervals': intervals}]})
+        result = _cross_boundary_evidence({'words': words}, issue, observations, [survey], 'a' * 64)
+        self.assertEqual(result['after_ms'], [4000, 4500])
+        self.assertIsNone(_cross_boundary_evidence({'words': words}, issue, observations[:1] * 2, [survey], 'a' * 64))
+        for window in survey['windows']:
+            window['interval_comparisons'][0]['intervals']['after']['nll_per_frame'] = .01
+        self.assertIsNone(_cross_boundary_evidence({'words': words}, issue, observations, [survey], 'a' * 64))
+
+    def test_substitution_retention_requires_two_models_and_context_not_nearby_pronoun(self):
+        texts = ['says.', 'So', 'out', 'just', 'tells', 'you']
+        words = [dict(id=str(i), sentence_id='s', text=t, start_ms=1000 + i * 400,
+                      end_ms=1200 + i * 400) for i, t in enumerate(texts)]
+        issue = {'recognized': 'So out', 'reference': 'it', 'start_ms': 1400, 'end_ms': 2000}
+        observations = []
+        for model in ('b', 'c'):
+            observations.append({'observation_id': model * 64, 'model_fingerprint': model * 64,
+                'audio_sha256': 'a' * 64, 'mode': 'independent_unprompted_asr',
+                'words': [{'text': 'it', 'start_ms': 800, 'end_ms': 900, 'probability': .99}] +
+                         [{**w, 'probability': .75 if w['text'] == 'So' else .99} for w in words]})
+        candidates = []
+        actual = ' '.join(texts)
+        edited = 'says. it just tells you'
+        for cid, text, nll in [('actual_recognized_context', actual, 40), ('reference_edited_context', edited, 90)]:
+            tokens = len(normalize_ctc(text))
+            candidates.append({'id': cid, 'text': text, 'status': 'measured', 'frame_count': 400,
+                'target_token_count': tokens, 'negative_log_likelihood': nll,
+                'nll_per_frame': nll / 400, 'nll_per_target_token': nll / tokens})
+        windows = [{'clip_start_ms': begin, 'clip_end_ms': 8000 + begin, 'clip_sha256': 'd' * 64,
+            'status': 'measured', 'comparison': {'algorithm': 'normalized-logsoftmax-ctc-full-context-nll-v1',
+                'source': 'independent_ctc_candidate_likelihood', 'edge_wildcards': False,
+                'comparable': True, 'frame_count': 400, 'observations': copy.deepcopy(candidates)}} for begin in (0, 100)]
+        source = {'audio_sha256': 'a' * 64, 'model_sha256': 'e' * 64,
+            'input_words_sha256': reference_words_fingerprint(words),
+            'rows': [{**issue, 'issue_key': reference_issue_key(issue), 'windows': windows}]}
+        self.assertIsNotNone(_substitution_retention({'words': words}, issue, observations, [source], 'a' * 64))
+        self.assertIsNone(_substitution_retention({'words': words}, issue, observations[:1] * 2, [source], 'a' * 64))
+        alternate = copy.deepcopy(observations[0])
+        alternate['words'] = [{**w, 'probability': .99} for w in words[:1]] + [
+            {'text': 'it', 'start_ms': 1400, 'end_ms': 2000, 'probability': .99}] + [
+            {**w, 'probability': .99} for w in words[3:]]
+        self.assertIsNone(_substitution_retention({'words': words}, issue, observations + [alternate], [source], 'a' * 64))
+        for a, b in [('13', '3'), ('not valid', 'valid'), ('can not', 'can')]:
+            self.assertIsNone(_substitution_retention({'words': words}, {**issue, 'recognized': a, 'reference': b}, observations, [source], 'a' * 64))
 
     def test_weak_named_token_or_changed_acoustic_audio_cannot_delete(self):
         package, issue, observations, source = duplicate_fixture()

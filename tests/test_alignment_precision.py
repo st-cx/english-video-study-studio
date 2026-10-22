@@ -10,6 +10,57 @@ def word(text,start,end,**extra):return {'text':text,'start_ms':start,'end_ms':e
 
 
 class AlignmentPrecisionTests(unittest.TestCase):
+    def _align_fixture(self, aligned, recognized, observed):
+        segment = SimpleNamespace(start=0, words=[SimpleNamespace(word=w['text'], start=w['start_ms']/1000,
+                                                                  end=w['end_ms']/1000) for w in aligned])
+        model = SimpleNamespace(align=lambda *a, **kw: SimpleNamespace(segments=[segment]))
+        with patch.dict('sys.modules', {'stable_whisper': SimpleNamespace()}), \
+                patch('app.alignment._acoustic_observation', return_value=observed):
+            return align_words(Path('unused.mp3'), recognized, 'unused', lambda *a: None, alignment_model=model)
+
+    def test_distant_zero_token_cannot_borrow_anchors_six_seconds_later(self):
+        expected = [word('When', 7480, 7480), word('you', 7480, 7660), word('share', 7660, 7960)]
+        observed = [word('When', 820, 1460, probability=.999),
+                    word('you', 7480, 7660), word('share', 7660, 7960)]
+        self.assertNotIn(0, _contextual_matches(expected, observed))
+        self.assertIn(1, _contextual_matches(expected, observed))
+
+    def test_unanchored_initial_zero_fallback_goes_to_contextual_remeasurement(self):
+        aligned = [word('When', 7480, 7480), word('you', 7480, 7660), word('share', 7660, 7960)]
+        recognized = [dict(w, probability=.99) for w in aligned]
+        recognized[0].update(start_ms=820, end_ms=1460, probability=.5586)
+        observed = [dict(w, probability=.99) for w in aligned]
+        observed[0].update(start_ms=7200, end_ms=7480)
+        output, report = self._align_fixture(aligned, recognized, observed)
+        self.assertEqual((output[0]['start_ms'], output[0]['end_ms']), (7200, 7480))
+        self.assertTrue(any(item['method'] == 'contextual_window_asr_transaction'
+                            and item['text'] == 'When' for item in report['alignment_repairs']))
+        self.assertFalse(any(item['method'] == 'compatible_independent_asr_transaction'
+                             and item['text'] == 'When' for item in report['alignment_repairs']))
+        self.assertEqual(report['alignment_disputes'], [])
+
+    def test_repeated_isolated_local_asr_word_stays_disputed_even_with_high_confidence(self):
+        aligned = [word('When', 7480, 7480), word('you', 7480, 7660), word('share', 7660, 7960)]
+        recognized = [dict(w, probability=.99) for w in aligned]
+        recognized[0].update(start_ms=820, end_ms=1460, probability=.9999)
+        output, report = self._align_fixture(aligned, recognized, recognized)
+        self.assertEqual((output[0]['start_ms'], output[0]['end_ms']), (7480, 7480))
+        self.assertEqual(len(report['alignment_disputes']), 1)
+        self.assertIn('unanchored_large_zero_duration', report['alignment_disputes'][0]['reason'])
+        self.assertFalse(report['alignment_repairs'])
+        self.assertTrue(report['alignment_window_audits'])
+        self.assertTrue(all(0 not in item['matched_indices'] for item in report['alignment_window_audits']))
+
+    def test_large_zero_fallback_with_two_actual_nearby_anchors_keeps_measured_span(self):
+        aligned = [word('We', 1000, 1200), word('can', 1200, 1400),
+                   word('share', 7480, 7480), word('again.', 8000, 8300)]
+        recognized = [dict(w, probability=.99) for w in aligned]
+        recognized[2].update(start_ms=1400, end_ms=1600)
+        output, report = self._align_fixture(aligned, recognized, [])
+        self.assertEqual((output[2]['start_ms'], output[2]['end_ms']), (1400, 1600))
+        self.assertTrue(any(item['method'] == 'compatible_independent_asr_transaction'
+                            and item['text'] == 'share' for item in report['alignment_repairs']))
+
     def test_individual_asr_fallback_cannot_reverse_adjacent_zero_word(self):
         # Actual long-lesson shape: I is zero at 172720; ASR puts think earlier.
         source=[word('programming,',172060,172500),word('I',172720,172720),word('think',172720,172720),word('the',172720,172780)]

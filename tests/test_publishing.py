@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import copy
 import importlib.util
 import json
 import tempfile
+import threading
 import time
 import unittest
 import zipfile
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
+from urllib.parse import urlsplit
 
 from app import publishing as pub
 
@@ -18,6 +21,15 @@ class FakeTransport:
     def __init__(self):
         self.calls = []
         self.error = None
+        self.error_before_submit = False
+        self.valid = True
+        self.archives = []
+
+    async def check_account(self, credentials):
+        return {'valid': self.valid, 'name': 'Local test account' if self.valid else ''}
+
+    async def recent_uploads(self, credentials):
+        return self.archives
 
     async def create_qr(self):
         return object(), 'data:image/png;base64,' + base64.b64encode(b'fake-qr').decode()
@@ -25,16 +37,26 @@ class FakeTransport:
     async def poll_qr(self, login):
         return 'done', {'sessdata': 'private-session-example', 'bili_jct': 'private-csrf-example'}
 
-    async def submit(self, credentials, video, cover, metadata):
+    async def submit(self, credentials, video, cover, metadata, progress=None):
         self.calls.append((credentials, video, cover, metadata))
+        if progress:
+            progress({'stage': 'uploading', 'progress': 50, 'stage_message': 'Uploading fixture'})
+        if self.error and self.error_before_submit:
+            raise self.error
+        if progress:
+            progress({'stage': 'submitting', 'progress': 97, 'stage_message': 'Submitting fixture', 'cid': 9876})
         if self.error:
             raise self.error
+        if progress:
+            progress({'stage': 'accepted', 'progress': 100, 'bvid': 'BV1234567890', 'aid': 123})
         return {'bvid': 'BV1234567890', 'aid': 123}
 
 
 class PublishingTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
+        work = Path(__file__).resolve().parents[1] / 'work'
+        work.mkdir(exist_ok=True)
+        self.temporary = tempfile.TemporaryDirectory(prefix='publishing-test-', dir=work)
         self.root = Path(self.temporary.name)
         self.profile = self.root / 'profile'
         self.profile.mkdir()
@@ -54,13 +76,24 @@ class PublishingTests(unittest.TestCase):
         self.transport = FakeTransport()
         self.patches = [patch.object(pub, 'data_root', return_value=self.profile),
                         patch.object(pub, '_TRANSPORT', self.transport),
+                        patch.object(pub, '_verify_render', return_value={'status': 'verified'}),
                         patch.object(pub.security, '_protect', side_effect=lambda value, decrypt=False: value[4:] if decrypt else b'enc:' + value)]
         for item in self.patches:
             item.start()
         pub._SESSIONS.clear()
         pub._ACTIVE.clear()
+        pub._ACCOUNT_CHECK.clear()
+        pub._LAST_LOGIN_DIAGNOSTIC.clear()
+        pub._LOGIN_DIAGNOSTIC_HISTORY.clear()
 
     def tearDown(self):
+        sessions = list(pub._SESSIONS.values())
+        with pub._LOCK:
+            pub._invalidate_login_sessions()
+        for session in sessions:
+            if session.get('worker'):
+                session['worker'].join(timeout=5)
+                self.assertFalse(session['worker'].is_alive())
         deadline = time.monotonic() + 5
         while pub._ACTIVE and time.monotonic() < deadline:
             time.sleep(.01)
@@ -97,6 +130,9 @@ class PublishingTests(unittest.TestCase):
         self.assertNotIn('csrf', public)
         self.assertFalse((self.profile / 'settings.json').exists())
         self.assertFalse((self.profile / 'deepseek.key.dpapi').exists())
+        self.assertFalse(pub.public_state()['verified'])
+        self.assertTrue(pub.check_account()['verified'])
+        self.assertEqual(pub.public_state()['account_name'], 'Local test account')
         self.assertFalse(pub.disconnect()['configured'])
         self.assertEqual(pub.poll_login(start['login_id'])['status'], 'expired')
 
@@ -105,6 +141,23 @@ class PublishingTests(unittest.TestCase):
         pub._SESSIONS[start['login_id']]['created'] -= 200
         self.assertEqual(pub.poll_login(start['login_id'])['status'], 'expired')
         self.assertFalse((self.profile / 'bilibili.key.dpapi').exists())
+
+    def test_completed_login_stays_done_after_qr_lifetime_but_disconnect_invalidates_it(self):
+        started = pub.start_login()
+        self.assertEqual(pub.poll_login(started['login_id'])['status'], 'done')
+        path = self.profile / 'bilibili.key.dpapi'
+        saved = path.read_bytes()
+        pub._SESSIONS[started['login_id']]['created'] -= 181
+        with patch.object(self.transport, 'poll_qr', AsyncMock(side_effect=AssertionError('completed login must not repoll'))) as query:
+            result = pub.poll_login(started['login_id'])
+        self.assertEqual(result['status'], 'done')
+        self.assertTrue(result['configured'])
+        self.assertEqual(pub.public_state()['login_diagnostic']['status'], 'done')
+        self.assertEqual(path.read_bytes(), saved)
+        query.assert_not_awaited()
+        pub.disconnect()
+        self.assertEqual(pub.poll_login(started['login_id'])['status'], 'expired')
+        self.assertFalse(path.exists())
 
     def test_prepare_is_persistent_idempotent_private_and_no_network(self):
         one = self.draft()
@@ -190,6 +243,7 @@ class PublishingTests(unittest.TestCase):
         self.assertEqual(metadata['tag'], '英语学习,精听')
         self.assertEqual(metadata['copyright'], 2)
         self.assertEqual(metadata['source'], 'https://example.org/source')
+        self.assertEqual(metadata['no_reprint'], 0)
         self.assertEqual(pub.submit_publication(draft['id'])['status'], 'published')
         self.assertEqual(len(self.transport.calls), 1)
         self.assertNotIn('private-session', json.dumps(pub.list_publications()))
@@ -273,6 +327,322 @@ class PublishingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '损坏'):
             self.draft()
         self.assertEqual(path.read_text(), '{broken')
+
+    def test_render_manifest_is_checked_before_preparation_not_only_after_draft(self):
+        with patch.object(pub, '_verify_render', side_effect=ValueError('成片对应旧内容，请重新导出。')):
+            draft = self.draft()
+            self.assertEqual(draft['status'], 'blocked')
+            self.assertIn('成片对应旧内容', ' '.join(draft['blockers']))
+        self.assertFalse(self.transport.calls)
+
+    def test_expired_login_stops_before_upload_and_remains_private(self):
+        self.login()
+        self.transport.valid = False
+        self.assertEqual(pub.check_account()['status'], 'expired')
+        draft = self.draft()
+        pub.submit_publication(draft['id'])
+        final = self.wait_finished()
+        self.assertEqual(final['status'], 'blocked')
+        self.assertNotIn('attempted_at', final)
+        self.assertFalse(self.transport.calls)
+        self.assertNotIn('private-session', json.dumps(final))
+
+    def test_upload_failure_is_retryable_but_not_automatically_replayed(self):
+        self.login()
+        self.transport.error = TimeoutError('private-upload-url')
+        self.transport.error_before_submit = True
+        draft = self.draft(auto_publish=True)
+        pub.submit_publication(draft['id'])
+        final = self.wait_finished()
+        self.assertEqual(final['status'], 'blocked')
+        self.assertEqual(final['stage'], 'uploading')
+        self.assertNotIn('attempted_at', final)
+        self.assertEqual(pub.process_ready_publications(), [])
+        self.transport.error = None
+        pub.submit_publication(draft['id'])
+        self.assertEqual(self.wait_finished()['status'], 'published')
+        self.assertEqual(len(self.transport.calls), 2)
+
+    def test_recovery_distinguishes_upload_from_final_archive_submission(self):
+        draft = self.draft()
+        pub._finish(draft['id'], status='submitting', stage='uploading')
+        self.assertEqual(pub.recover_publications()[0]['status'], 'blocked')
+        pub._finish(draft['id'], status='submitting', stage='submitting', attempted_at='2026-01-01T00:00:00Z')
+        self.assertEqual(pub.recover_publications()[0]['status'], 'uncertain')
+        self.assertFalse(self.transport.calls)
+
+    def test_uncertain_lookup_only_returns_safe_matching_candidates_never_retries(self):
+        self.login()
+        draft = self.draft()
+        pub._finish(draft['id'], status='uncertain', attempted_at='2026-01-01T00:00:00Z', cid=42)
+        self.transport.archives = [
+            {'Archive': {'bvid': 'BV1234567890', 'aid': 123, 'title': draft['title'], 'private': 'secret'}},
+            {'archive': {'bvid': 'BVabcdefghij', 'aid': 124, 'title': 'Other title', 'ctime': 100}, 'videos': [{'cid': 42}]},
+            {'Archive': {'bvid': 'BV0123456789', 'aid': 125, 'title': 'Unrelated'}},
+            {'Archive': {'bvid': 'javascript:bad', 'aid': 123, 'title': draft['title']}},
+            {'Archive': {'bvid': 'BV1234567890', 'aid': 123, 'title': draft['title']}},
+        ]
+        result = pub.reconcile_publication(draft['id'])
+        self.assertEqual(result['status'], 'uncertain')
+        self.assertEqual(len(result['candidates']), 2)
+        self.assertEqual(result['candidates'][0]['matched_by'], 'uploaded_part')
+        self.assertNotIn('secret', json.dumps(result))
+        self.assertNotIn('private-session', json.dumps(result))
+        pub.submit_publication(draft['id'])
+        self.assertFalse(self.transport.calls)
+
+    def test_empty_remote_list_never_proves_submission_failed(self):
+        self.login()
+        draft = self.draft()
+        pub._finish(draft['id'], status='uncertain', attempted_at='2026-01-01T00:00:00Z')
+        result = pub.reconcile_publication(draft['id'])
+        self.assertEqual(result['reconciliation_status'], 'not_found')
+        self.assertEqual(result['status'], 'uncertain')
+        self.assertFalse(self.transport.calls)
+
+    def test_valid_archive_response_survives_later_sdk_failure(self):
+        self.login()
+        async def accepted_then_fail(credentials, video, cover, metadata, progress=None):
+            progress({'stage': 'submitting', 'progress': 97})
+            progress({'stage': 'accepted', 'progress': 100, 'bvid': 'BV1234567890', 'aid': 123})
+            raise RuntimeError('private-sdk-tail-failure')
+        self.transport.submit = accepted_then_fail
+        draft = self.draft()
+        pub.submit_publication(draft['id'])
+        result = self.wait_finished()
+        self.assertEqual(result['status'], 'published')
+        self.assertEqual(result['bvid'], 'BV1234567890')
+        self.assertNotIn('private-sdk', json.dumps(result))
+
+    def test_disconnect_during_upload_stops_before_final_remote_submit(self):
+        self.login()
+        submitted = []
+        async def disconnect_then_submit(credentials, video, cover, metadata, progress=None):
+            pub.disconnect()
+            progress({'stage': 'submitting', 'progress': 97})
+            submitted.append(True)
+        self.transport.submit = disconnect_then_submit
+        draft = self.draft()
+        pub.submit_publication(draft['id'])
+        result = self.wait_finished()
+        self.assertEqual(result['status'], 'blocked')
+        self.assertNotIn('attempted_at', result)
+        self.assertEqual(submitted, [])
+
+    def test_qr_encryption_failure_exposes_safe_stage_not_private_exception(self):
+        start = pub.start_login()
+        with patch.object(pub.security, '_protect', side_effect=OSError('private-credential-and-path')):
+            with self.assertRaisesRegex(ValueError, r'login\.protect\.system') as error:
+                pub.poll_login(start['login_id'])
+        self.assertNotIn('private-credential', str(error.exception))
+        self.assertFalse((self.profile / 'bilibili.key.dpapi').exists())
+
+    def test_qr_save_failure_keeps_existing_credentials_and_has_safe_stage(self):
+        path = self.profile / 'bilibili.key.dpapi'
+        previous = b'enc:{"sessdata":"old-session","bili_jct":"old-csrf"}'
+        path.write_bytes(previous)
+        start = pub.start_login()
+        with patch.object(Path, 'replace', side_effect=PermissionError('private-credential-and-path')):
+            with self.assertRaisesRegex(ValueError, r'login\.save\.permission') as error:
+                pub.poll_login(start['login_id'])
+        self.assertEqual(path.read_bytes(), previous)
+        self.assertNotIn('private-credential', str(error.exception))
+        self.assertEqual(list(self.profile.glob('*.tmp')), [])
+
+    def test_explicit_monitor_saves_phone_confirmation_without_client_polling(self):
+        started = pub.start_login(monitor=True)
+        session = pub._SESSIONS[started['login_id']]
+        session['worker'].join(timeout=3)
+        self.assertFalse(session['worker'].is_alive())
+        self.assertTrue((self.profile / 'bilibili.key.dpapi').is_file())
+        state = pub.public_state()
+        self.assertEqual(state['login_diagnostic']['status'], 'done')
+        self.assertEqual(state['last_login_error'], '')
+        self.assertNotIn('private-session', json.dumps(state))
+
+    def test_disconnect_invalidates_inflight_monitor_before_saving_credentials(self):
+        requested, release = threading.Event(), threading.Event()
+        async def delayed_confirmation(login):
+            requested.set()
+            while not release.is_set():
+                await asyncio.sleep(.005)
+            return 'done', {'sessdata': 'private-old-session', 'bili_jct': 'private-csrf'}
+        self.transport.poll_qr = delayed_confirmation
+        started = pub.start_login(monitor=True)
+        session = pub._SESSIONS[started['login_id']]
+        try:
+            self.assertTrue(requested.wait(timeout=2))
+            pub.disconnect()
+        finally:
+            release.set()
+            session['worker'].join(timeout=3)
+        self.assertFalse(session['worker'].is_alive())
+        self.assertFalse((self.profile / 'bilibili.key.dpapi').exists())
+        self.assertFalse(pub.public_state()['configured'])
+
+    def test_timeout_keeps_previous_meaningful_login_error(self):
+        self.transport.poll_qr = AsyncMock(side_effect=[TimeoutError('private-token-in-error'), ('timeout', None)])
+        started = pub.start_login()
+        with self.assertRaisesRegex(ValueError, r'login\.poll\.timeout'):
+            pub.poll_login(started['login_id'])
+        pub._SESSIONS[started['login_id']]['last_poll'] -= 2
+        final = pub.poll_login(started['login_id'])
+        diagnostic = pub.public_state()['login_diagnostic']
+        self.assertEqual(final['status'], 'timeout')
+        self.assertEqual(diagnostic['status'], 'timeout')
+        self.assertEqual(diagnostic['error_category'], 'timeout')
+        self.assertIn('login.poll.timeout', final['last_error'])
+        self.assertIn('login.poll.timeout', pub.public_state()['last_login_error'])
+        self.assertNotIn('private-token', json.dumps(diagnostic))
+        self.assertNotIn('login_id', diagnostic)
+
+    def test_reuse_keeps_same_qr_and_reports_remaining_lifetime_without_reset(self):
+        self.transport.create_qr = AsyncMock(wraps=self.transport.create_qr)
+        first = pub.start_login()
+        session = pub._SESSIONS[first['login_id']]
+        session['created'] -= 35
+        created = session['created']
+        second = pub.start_login(reuse=True)
+        self.assertEqual(second['login_id'], first['login_id'])
+        self.assertEqual(second['qr_image'], first['qr_image'])
+        self.assertTrue(140 <= second['expires_in'] <= 145)
+        self.assertEqual(session['created'], created)
+        self.transport.create_qr.assert_awaited_once()
+        self.assertFalse(session['stop'].is_set())
+
+    def test_default_new_qr_still_invalidates_previous_session(self):
+        first = pub.start_login()
+        session = pub._SESSIONS[first['login_id']]
+        second = pub.start_login()
+        self.assertNotEqual(first['login_id'], second['login_id'])
+        self.assertTrue(session['stop'].is_set())
+        self.assertNotIn(first['login_id'], pub._SESSIONS)
+
+    def test_done_timeout_and_locally_expired_qr_are_not_reused(self):
+        for status, elapsed in (('done', 0), ('timeout', 0), ('scan', 181)):
+            first = pub.start_login()
+            session = pub._SESSIONS[first['login_id']]
+            session['status'] = status
+            session['created'] -= elapsed
+            second = pub.start_login(reuse=True)
+            with self.subTest(status=status, elapsed=elapsed):
+                self.assertNotEqual(first['login_id'], second['login_id'])
+                self.assertTrue(session['stop'].is_set())
+
+    def test_reusing_unmonitored_session_can_enable_background_confirmation(self):
+        first = pub.start_login()
+        second = pub.start_login(monitor=True, reuse=True)
+        self.assertEqual(first['login_id'], second['login_id'])
+        session = pub._SESSIONS[first['login_id']]
+        session['worker'].join(timeout=3)
+        self.assertFalse(session['worker'].is_alive())
+        self.assertTrue((self.profile / 'bilibili.key.dpapi').exists())
+
+    def test_new_qr_invalidates_inflight_old_monitor_before_writing(self):
+        requested, release = threading.Event(), threading.Event()
+        async def delayed_confirmation(login):
+            requested.set()
+            while not release.is_set():
+                await asyncio.sleep(.005)
+            return 'done', {'sessdata': 'private-old-session', 'bili_jct': 'private-csrf'}
+        self.transport.poll_qr = delayed_confirmation
+        old = pub.start_login(monitor=True)
+        session = pub._SESSIONS[old['login_id']]
+        try:
+            self.assertTrue(requested.wait(timeout=2))
+            current = pub.start_login()
+            self.assertNotEqual(old['login_id'], current['login_id'])
+        finally:
+            release.set()
+            session['worker'].join(timeout=3)
+        self.assertFalse(session['worker'].is_alive())
+        self.assertFalse((self.profile / 'bilibili.key.dpapi').exists())
+
+    def test_automatic_draft_waits_for_login_without_blocking_then_dispatches(self):
+        draft = self.draft(auto_publish=True)
+        with patch.object(pub, 'submit_publication') as submit, patch.object(pub, 'start_login') as generate_qr:
+            self.assertEqual(pub.process_ready_publications(), [])
+            submit.assert_not_called()
+            generate_qr.assert_not_called()
+        waiting = pub.list_publications()[0]
+        self.assertEqual(waiting['status'], 'draft')
+        self.assertEqual(waiting['error'], '')
+        self.assertNotIn('attempted_at', waiting)
+        self.login()
+        results = pub.process_ready_publications()
+        self.assertEqual(results[0]['id'], draft['id'])
+        self.assertEqual(self.wait_finished()['status'], 'published')
+        self.assertEqual(len(self.transport.calls), 1)
+
+    def test_waiting_login_does_not_bypass_quality_blockers(self):
+        self.package['quality']['needs_review'] = True
+        self.write_package()
+        draft = self.draft(auto_publish=True)
+        self.assertEqual(draft['status'], 'blocked')
+        self.assertEqual(pub.process_ready_publications(), [])
+        self.login()
+        self.assertEqual(pub.process_ready_publications(), [])
+        self.assertEqual(pub.list_publications()[0]['status'], 'blocked')
+        self.assertFalse(self.transport.calls)
+
+    def test_pause_automatic_draft_prevents_dispatch_without_deleting_draft(self):
+        self.login()
+        draft = self.draft(auto_publish=True)
+        paused = pub.pause_auto_publication(draft['id'])
+        self.assertFalse(paused['auto_publish'])
+        self.assertEqual(paused['status'], 'draft')
+        self.assertEqual(len(pub.list_publications()), 1)
+        self.assertEqual(pub.process_ready_publications(), [])
+        self.assertFalse(self.transport.calls)
+
+    def test_pausing_after_automatic_scanner_snapshot_still_prevents_claim(self):
+        self.login()
+        draft = self.draft(auto_publish=True)
+        stale = pub.list_publications()
+        pub.pause_auto_publication(draft['id'])
+        with patch.object(pub, 'list_publications', return_value=stale):
+            self.assertEqual(pub.process_ready_publications(), [])
+        self.assertFalse(self.transport.calls)
+        self.assertFalse(pub._ACTIVE)
+
+    def test_pause_never_claims_to_recall_started_or_uncertain_publication(self):
+        draft = self.draft(auto_publish=True)
+        for status, attempted in (('submitting', False), ('published', False), ('uncertain', False),
+                                  ('draft', True), ('blocked', True)):
+            fields = {'status': status}
+            if attempted:
+                fields['attempted_at'] = '2026-01-01T00:00:00Z'
+            pub._finish(draft['id'], **fields)
+            with self.subTest(status=status, attempted=attempted), self.assertRaisesRegex(ValueError, '不能.*撤回'):
+                pub.pause_auto_publication(draft['id'])
+        self.assertTrue(pub.list_publications()[0]['auto_publish'])
+
+    def test_safe_login_history_survives_new_qr_without_tokens_or_session_identifiers(self):
+        first = pub.start_login()
+        session = pub._SESSIONS[first['login_id']]
+        error = pub._QRFlowError('credentials', 'unexpected_address',
+            urlsplit('https://account.bilibili.com/crossDomain?SESSDATA=private-query#private-fragment'))
+        pub._record_login_diagnostic(first['login_id'], session, 'error', error)
+        pub._record_login_diagnostic(first['login_id'], session, 'error', error)
+        self.assertEqual(len(pub.public_state()['login_diagnostic_history']), 2)
+        second = pub.start_login()
+        current = pub._SESSIONS[second['login_id']]
+        pub._record_login_diagnostic(second['login_id'], current, 'scan')
+        history = pub.public_state()['login_diagnostic_history']
+        self.assertEqual(len(history), 3)
+        self.assertEqual(history[1]['callback_hostname'], 'account.bilibili.com')
+        self.assertEqual(history[1]['callback_path'], '/crossDomain')
+        serialized = json.dumps(history)
+        for private in ('private-query', 'private-fragment', first['login_id'], second['login_id'], 'qr_image', 'qrcode_key'):
+            self.assertNotIn(private, serialized)
+
+    def test_login_history_is_bounded_and_disconnect_clears_it(self):
+        for _ in range(15):
+            pub.start_login()
+        self.assertEqual(len(pub.public_state()['login_diagnostic_history']), 12)
+        pub.disconnect()
+        self.assertEqual(pub.public_state()['login_diagnostic_history'], [])
+        self.assertEqual(pub.public_state()['login_diagnostic'], {})
 
 
 if __name__ == '__main__':

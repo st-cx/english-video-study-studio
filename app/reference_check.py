@@ -195,6 +195,11 @@ def reference_issues(words: list[dict], reference: str) -> list[dict]:
     expected = []
     for index, match in enumerate(_PATTERN.finditer(reference or '')):
         expected.extend({**item, 'source_id': index} for item in _parts(match.group()))
+    # Yea and yay spell the same /yei/ interjection. Only an explicit source
+    # spelling yea can authorize this comparison; yeah and yes remain distinct.
+    explicit_yea = any(item['value'] == 'yea' for item in expected)
+    if explicit_yea:
+        recognized = [{**item, 'value': 'yea'} if item['value'] == 'yay' else item for item in recognized]
     recognized, expected = _canonical(_reference_confirmed_contractions(_spoken_code_separators(recognized, reference or ''), reference or '')), _canonical(expected)
     if not recognized or not expected:
         return []

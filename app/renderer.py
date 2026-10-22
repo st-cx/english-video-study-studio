@@ -78,12 +78,14 @@ def render_video(package_path:Path,folder:Path,progress)->Path:
 
 
 def _render_video(package_path: Path, folder: Path, progress,start_ms:int,end_ms:int) -> Path:
+    from .render_identity import create_manifest, input_identity, manifest_path
     node = shutil.which("node")
     cli = ROOT / "node_modules" / "@remotion" / "cli" / "remotion-cli.js"
     if not node or not cli.is_file():
         raise RuntimeError("未安装 Node.js 或 Remotion。请先双击 install.bat。")
     package = json.loads(package_path.read_text(encoding="utf-8"))
     package.setdefault('processing',{})['layout_audit']=audit_layout(package_path,folder,progress)
+    expected_inputs = input_identity(package, folder)
     props_path = folder / "render-props.json"
     props_path.write_text(json.dumps({"episode": package,'startMs':start_ms,'endMs':end_ms}, ensure_ascii=False), encoding="utf-8")
     full=start_ms==0 and end_ms==round(package['episode']['duration_s']*1000)
@@ -132,32 +134,49 @@ def _render_video(package_path: Path, folder: Path, progress,start_ms:int,end_ms
             raise RuntimeError("MP4 验收失败：需要 1920×1080 画面和原声音轨。")
         if video.get('r_frame_rate') != '30/1' or abs(float(metadata['format']['duration'])-(end_ms-start_ms)/1000)>.15:
             raise RuntimeError('MP4 验收失败：帧率或时长与节目数据不一致。')
+        # A concurrent edit must never be paired with the just-rendered MP4.
+        current_package = json.loads(package_path.read_text(encoding='utf-8'))
+        if input_identity(current_package, folder) != expected_inputs:
+            raise ValueError('渲染期间课程或媒体已改变，已保留原成片，请重新导出。')
+        current_package.setdefault('processing', {})['layout_audit'] = package['processing']['layout_audit']
         # Prepare the companion page before publishing the new video. Keep a
         # rollback copy until both files have been replaced successfully.
         from .study_page import write_study_page
         with tempfile.TemporaryDirectory(prefix='.publish-', dir=folder) as staging:
             staged = Path(staging)
-            ready_package = {**package, 'render': {**package['render'], 'status': 'ready' if full else package['render'].get('status','prepared')},'artifacts':{**package.get('artifacts',{}),'video':'ready' if full else package.get('artifacts',{}).get('video','not_requested')}}
+            ready_package = {**current_package, 'render': {**current_package['render'], 'status': 'ready' if full else current_package['render'].get('status','prepared')},'artifacts':{**current_package.get('artifacts',{}),'video':'ready' if full else current_package.get('artifacts',{}).get('video','not_requested')}}
+            if full:ready_package['render']['video_file']='lesson.mp4'
+            video_relative = final_output.relative_to(folder).as_posix()
+            final_manifest = manifest_path(folder, video_relative)
+            manifest = create_manifest(ready_package, folder, temp_output, video_relative,
+                                       start_ms, end_ms, expected_inputs=expected_inputs)
+            staged_manifest = staged / 'render-manifest.json'
+            staged_manifest.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
             staged_page = write_study_page(ready_package, staged)
             old_video = staged / 'previous.mp4'
             old_page=staged/'previous-study.html'
             old_package=staged/'previous-episode.json'
+            old_manifest=staged/'previous-manifest.json'
             page_file=folder/'study.html'
             had_page=page_file.is_file()
             had_package=package_path.is_file()
+            had_manifest=final_manifest.is_file()
             if had_page:shutil.copy2(page_file,old_page)
             if had_package:shutil.copy2(package_path,old_package)
+            if had_manifest:shutil.copy2(final_manifest,old_manifest)
             had_video = final_output.is_file()
             if had_video: os.replace(final_output, old_video)
             try:
                 os.replace(temp_output, final_output)
+                os.replace(staged_manifest, final_manifest)
                 os.replace(staged_page, folder / 'study.html')
                 from .storage import save_episode
-                if full:ready_package['render']['video_file']='lesson.mp4'
                 save_episode(ready_package,folder)
             except Exception:
                 if had_video: os.replace(old_video, final_output)
                 else: final_output.unlink(missing_ok=True)
+                if had_manifest:os.replace(old_manifest,final_manifest)
+                else:final_manifest.unlink(missing_ok=True)
                 if had_page:os.replace(old_page,page_file)
                 else:page_file.unlink(missing_ok=True)
                 if had_package:os.replace(old_package,package_path)

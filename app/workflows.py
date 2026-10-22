@@ -251,7 +251,7 @@ def handoff_completed(job_lookup, package_provider):
                         # reuses this ID and never blindly creates a new post.
                         _write_json_atomic(_path(), state)
                     if draft.get('status') in {'ready', 'draft'} and not draft.get('attempted_at'):
-                        submit_publication(draft['id'], package_provider=package_provider)
+                        submit_publication(draft['id'], package_provider=package_provider, automatic=True)
                         target['error'] = ''
                     elif draft.get('status') == 'blocked':
                         target['error'] = '成片或同步检查尚未通过，请在投稿草稿中处理。'
@@ -265,6 +265,7 @@ def handoff_completed(job_lookup, package_provider):
 
 
 def run_background(enqueue, job_lookup, package_provider, stop=None):
+    from .publishing import process_ready_publications
     stop = stop or threading.Event()
     def loop():
         while not stop.is_set():
@@ -278,6 +279,10 @@ def run_background(enqueue, job_lookup, package_provider, stop=None):
                 handoff_completed(job_lookup, package_provider)
             except Exception:
                 pass
+            try:
+                process_ready_publications(package_provider)
+            except Exception:
+                pass  # An account or draft failure cannot stop resource checks.
             stop.wait(60)
     threading.Thread(target=loop, daemon=True, name='english-resources').start()
     return stop

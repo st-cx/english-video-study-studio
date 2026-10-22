@@ -506,7 +506,13 @@ def create_media_episode(spec:dict,job_folder:Path,progress)->dict:
     _process_chapters(package,folder,reference,cues,progress)
     mode=spec.get('render_mode','auto')
     if mode=='video' or mode=='auto' and package['episode']['duration_s']<=1200:
-        if not (folder/'lesson.mp4').is_file() or package['artifacts'].get('video')!='ready':
+        from .render_identity import verify_render
+        try:
+            verify_render(package,folder,'lesson.mp4')
+            valid_render=package['artifacts'].get('video')=='ready'
+        except ValueError:
+            valid_render=False
+        if not valid_render:
             from .renderer import export_video
             export_video(folder/'episode.json',folder,progress)
             package=_read(folder/'episode.json')

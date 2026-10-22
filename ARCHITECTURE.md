@@ -47,3 +47,18 @@
 app.workflows 使用独立 resource-workflows.json，负责发现、去重及现有生产队列的 job_id 关联；app.publishing 独立保存 publications.json 和 bilibili.key.dpapi。原 settings.json、DeepSeek密钥、学习页存储键均保持。生产任务为唯一制作状态来源；投稿只能读已导出成片，不得上传原始媒体。提交结果未知保留 uncertain，重启和重复点击不得自动重发。
 
 API：GET /api/workflows、/api/publishing、/api/review-feedback?episode_id；POST /api/workflows、/<id>/scan|delete、/<id>/<item>/generate；POST /api/publishing/login、/login/poll、/disconnect、/drafts、/<id>/submit|bundle；POST /api/review-feedback。订阅轮询仅在本地服务运行时执行，逐来源显式开启自动制作／投稿。
+
+## v0.6.1 成片身份与可核对的提交边界
+
+`app.render_identity` 将可见教学内容、实际媒体与导出文件分开绑定：`content_fingerprint`只投影视频组件使用的课程字段，来源取实际显示名称；`input_identity`另核验原声音频、视频和封面的SHA256。审核、任务、缓存、主题摘要和浏览器进度不参与画面内容指纹。`renderer_sha256`绑定直接渲染组件、共享时间推导、字体度量、CSS及相关依赖的锁定版本，排除应用根版本和无关工作室界面。
+
+`verify_render(package, folder, video_relative) -> manifest`核对同目录的`<视频名>.manifest.json`、课程编号、内容/组件/媒体指纹、成片SHA256、整数毫秒范围和1920×1080／30fps。缺少清单、旧清单或任一输入改变时抛出不含本机目录的安全错误，不能因`artifacts.video=ready`而通过。渲染前后核对同一输入身份；新MP4、清单、学习页和课程数据作为同一发布事务替换，任一步失败恢复原版本。缓存与投稿准备均通过同一验证函数检查成片，禁止只靠文件存在判断可用。
+
+`app.subtitle_input`保留WebVTT清洗前的显示行和行内时间，只有相邻字幕、明确短暂显示与无新时间戳的旧行共同证明显示残留时才删除；新时间戳标注的真实重复对白继续保留。对齐回退要求附近的正时长语音锚点，不能把长音乐段后失败的词移到远处同词位置；无可靠局部证据时继续进入检查。
+
+投稿适配器的SDK事件是本次上传阶段的唯一来源。分块、合并、封面和稿件提交分别持久化；普通上传不设置已提交标记，`PRE_SUBMIT`同步回调必须先保存`attempted_at`再允许远端提交。已有有效`bvid`／`aid`响应不会因后续SDK事件报错被降为可重试；没有明确响应但已跨提交边界则保持`uncertain`。重启时只将能够证明尚未提交的上传阶段恢复为待处理，其余继续禁止盲重投。
+
+登录凭据存在不等于登录有效。显式账号检查只读验证当前凭据，并按凭据文件指纹和有效期缓存结果；二维码刷新或断开连接会使旧验证失效。稿件核对只读获取当前账号近期记录，按已知稿件编号、上传分段编号或标题列候选，不用候选唯一或列表为空推断可以重新发布。所有外部异常只保留安全错误和必要数字错误码，不公开Cookie、账号编号或原始响应。
+
+
+扫码状态只有一套同源实时界面，工作室内嵌与独立页均复用有效会话。响应应用前核对本页面代次及会话编号；仅本次done或后台明确done才能接收成功，不以凭据文件存在替代确认。已成功的服务端会话优先于QR寿命判断。后台run_background每轮独立派发已授权草稿，未登录保留等待，原子领取时重新核对auto_publish与rights；pause-auto只作用于未提交草稿。

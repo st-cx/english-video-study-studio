@@ -429,7 +429,7 @@ def recover_saved_jobs():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'EnglishVideoStudio/0.6.0'
+    server_version = 'EnglishVideoStudio/0.6.1'
 
     def log_message(self, fmt, *args):
         LOG.info('%s %s', self.command, urlparse(self.path).path)
@@ -491,7 +491,7 @@ class Handler(BaseHTTPRequestHandler):
             route = urlparse(self.path)
             if route.path == '/api/status':
                 settings = get_settings()
-                return self._json(200, {'name': '英语视频学习工作室', 'kind': 'universal', 'version': '0.6.0',
+                return self._json(200, {'name': '英语视频学习工作室', 'kind': 'universal', 'version': '0.6.1',
                                         'api_key_configured': has_api_key(), 'model': settings['model'], 'base_url': settings['base_url'],
                                         'daily_check_enabled': False, 'chunk_size': CHUNK_SIZE, 'max_media_size': MAX_MEDIA_SIZE})
             if route.path == '/api/jobs':
@@ -590,16 +590,22 @@ class Handler(BaseHTTPRequestHandler):
                 value = workflows.delete_source(match[1]) if match[2] == 'delete' else workflows.scan_source(match[1], _enqueue)
                 return self._json(200, value)
             if path == '/api/publishing/login':
-                return self._json(200, publishing.start_login())
+                return self._json(200, publishing.start_login(monitor=True, reuse=body.get('reuse') is True))
             if path == '/api/publishing/login/poll':
                 return self._json(200, publishing.poll_login(str(body.get('login_id', ''))))
             if path == '/api/publishing/disconnect':
                 return self._json(200, publishing.disconnect())
+            if path == '/api/publishing/verify':
+                return self._json(200, publishing.check_account())
             if path == '/api/publishing/drafts':
                 package, folder = _package_provider(body.get('episode_id', ''))
                 return self._json(200, publishing.prepare_publication(package, folder, body.get('options', {})))
-            match = re.fullmatch(r'/api/publishing/([a-f0-9]{32})/(submit|bundle)', path)
+            match = re.fullmatch(r'/api/publishing/([a-f0-9]{32})/(submit|bundle|reconcile|pause-auto)', path)
             if match:
+                if match[2] == 'pause-auto':
+                    return self._json(200, publishing.pause_auto_publication(match[1]))
+                if match[2] == 'reconcile':
+                    return self._json(200, publishing.reconcile_publication(match[1]))
                 action = publishing.submit_publication if match[2] == 'submit' else publishing.export_publication_bundle
                 return self._json(202 if match[2] == 'submit' else 200, action(match[1], package_provider=_package_provider))
             raise APIError(404, '找不到这个创作操作。')
