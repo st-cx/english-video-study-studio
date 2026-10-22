@@ -425,7 +425,7 @@ def recover_saved_jobs():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'EnglishVideoStudio/0.5.1'
+    server_version = 'EnglishVideoStudio/0.5.2'
 
     def log_message(self, fmt, *args):
         LOG.info('%s %s', self.command, urlparse(self.path).path)
@@ -487,7 +487,7 @@ class Handler(BaseHTTPRequestHandler):
             route = urlparse(self.path)
             if route.path == '/api/status':
                 settings = get_settings()
-                return self._json(200, {'name': '英语视频学习工作室', 'kind': 'universal', 'version': '0.5.1',
+                return self._json(200, {'name': '英语视频学习工作室', 'kind': 'universal', 'version': '0.5.2',
                                         'api_key_configured': has_api_key(), 'model': settings['model'], 'base_url': settings['base_url'],
                                         'daily_check_enabled': False, 'chunk_size': CHUNK_SIZE, 'max_media_size': MAX_MEDIA_SIZE})
             if route.path == '/api/jobs':

@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+const result=await build({entryPoints:['src/reviewNavigation.ts'],bundle:true,write:false,format:'esm',platform:'node'});
+const {lessonReviewItems,adjacentSentence}=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));
+const ref={start_ms:200,end_ms:250,recognized:'get',reference:'give',reason:'核对'};
+const pkg={episode:{duration_s:2},chapters:[{reference_issues:[ref],alignment_issues:[{start_ms:500,end_ms:700,text:'word'}]},{reference_issues:[ref]}],quality:{structural_issues:[{start_ms:0,end_ms:1,reason:'零时长'}]}};
+const items=lessonReviewItems(pkg);
+assert.equal(items.length,3);assert.equal(items[0].start_ms,0);assert.equal(items[1].actual,'get');assert.equal(items[1].reference,'give');
+assert.equal(lessonReviewItems({...pkg,chapters:[{reference_issues:[{...ref,start_ms:NaN},{...ref,start_ms:-1},{...ref,end_ms:3000}]}],quality:{}}).length,0);
+assert.deepEqual(lessonReviewItems({episode:{duration_s:2}}),[]);
+const sentences=[{id:'a',start_ms:100,end_ms:200},{id:'b',start_ms:500,end_ms:600},{id:'c',start_ms:900,end_ms:1000}];
+assert.equal(adjacentSentence(sentences,50,1)?.id,'a');assert.equal(adjacentSentence(sentences,550,-1)?.id,'a');assert.equal(adjacentSentence(sentences,550,1)?.id,'c');
+assert.equal(adjacentSentence(sentences,750,1)?.id,'c');assert.equal(adjacentSentence(sentences,750,-1)?.id,'b');
+assert.equal(adjacentSentence(sentences,100,-1),null);assert.equal(adjacentSentence(sentences,1000,1),null);
+console.log('review navigation: deduplication, invalid ranges, start-of-media and sentence gaps passed');

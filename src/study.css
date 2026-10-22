@@ -27,3 +27,8 @@
 @media(prefers-reduced-motion:reduce){.study-scroll-list,.chapter-tabs{scroll-behavior:auto}}
 
 .study-focus-link,.study-sentence b,.study-sentence span,.chapter-topic-title{overflow-wrap:anywhere}
+
+.study-review-panel{margin:16px 0;border:1px solid #e4d6b7;border-radius:14px;padding:14px 18px;background:#fffaf0;color:#665434}
+.study-review-panel summary{cursor:pointer;font-weight:700}.study-review-panel p{font-size:14px;line-height:1.7}.study-review-audit{display:inline-block;margin:0 0 14px;color:#315377}
+.study-review-items{max-height:330px;overflow:auto;overscroll-behavior:contain;display:grid;gap:8px}.study-review-items button{background:#fff;border:1px solid #e9dfcd;border-radius:10px;padding:12px;text-align:left;display:flex;flex-wrap:wrap;gap:5px 12px;cursor:pointer;color:inherit;min-width:0}
+.study-review-items time{font-variant-numeric:tabular-nums}.study-review-items span,.study-review-items small{flex-basis:100%;overflow-wrap:anywhere}.study-review-items small{color:#80735e}.sentence-transport button{flex:1}

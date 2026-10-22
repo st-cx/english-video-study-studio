@@ -3,6 +3,7 @@ export type TimedWord = {id:string;sentence_id:string;index:number;text:string;s
 export type Sentence = {id:string;start_ms:number;end_ms:number;text:string;translation:string;speaker:string;word_ids:string[];card_ids:string[]};
 export type TimedPhrase = {id:string;text:string;gloss_zh:string;word_ids:string[];sentence_id:string;study?:boolean};
 export type StudyCard = {id:string;type:'vocab'|'grammar';title:string;meaning:string;structure:string;example:string;translation:string;word_ids:string[];sentence_ids:string[];start_ms:number;end_ms:number;display?:boolean;show_meaning?:boolean;points?:{label:string;text:string}[]};
+export type SourceReviewIssue={start_ms:number;end_ms:number;recognized?:string;reference?:string;text?:string;reason:string};
 export type EpisodePackage = {
   version:number;
   episode:{id:string;title:string;title_zh:string;source_url:string;audio_url:string;duration_s:number;source_date:string;cover:string;audio_file:string;[key:string]:unknown};
@@ -10,10 +11,11 @@ export type EpisodePackage = {
   layout?:{version:number;pages:{id:string;sentence_id:string;start_ms:number;end_ms:number;lines:string[][];translation?:string}[]};
   source?:{kind:string;name?:string;url?:string;transcript_kind?:string};
   media?:{video_file?:string;audio_file:string;duration_s:number;source_offset_ms?:number;audio_stream_index?:number};
-  chapters?:{id:string;title:string;start_ms:number;end_ms:number;status:'ready'|'review'|'pending';teaching_status?:string}[];
+  chapters?:{id:string;title:string;start_ms:number;end_ms:number;status:'ready'|'review'|'pending';teaching_status?:string;reference_issues?:SourceReviewIssue[];alignment_issues?:SourceReviewIssue[]}[];
+  sync_review?:{page:string;sample_count:number;human_annotated_count:number;human_status:string};
   study_sections?:{version:number;status:'ready';source_fingerprint:string;items:{id:string;title:string;summary:string;start_ms:number;end_ms:number;start_sentence_id:string;sentence_ids:string[];evidence_sentence_ids:string[]}[]};
   artifacts?:{study:'pending'|'ready';video:'pending'|'ready'|'not_requested'|'failed'};
-  quality:{needs_review:boolean;flags:string[];source_similarity:number|null};
+  quality:{needs_review:boolean;flags:string[];source_similarity:number|null;structural_issues?:SourceReviewIssue[]};
   review:{recognized_transcript:string;official_transcript:string;approved:boolean;[key:string]:unknown};render:Record<string,unknown>;
 };
 export type CaptionPage = {id:string;sentence_id:string;words:TimedWord[];lines:TimedWord[][];start_ms:number;end_ms:number;translation?:string};
