@@ -5,3 +5,5 @@
 .creator-publication progress{width:100%;height:8px;accent-color:#688bb6}.creator-candidates{padding-left:18px;font-size:12px;line-height:1.8}.creator-candidates small{display:block;color:#8294aa}.creator-candidates a{overflow-wrap:anywhere}
 
 .creator-qr-live{margin-top:16px}.creator-qr-live iframe{display:block;width:100%;height:650px;border:1px solid #dbe4ef;border-radius:16px;background:#fff}.creator-qr-live>button{margin-top:8px}
+
+.creator-web-receipt{padding:14px 0;border-top:1px solid #e1e8f2}.creator-web-receipt summary{cursor:pointer;color:#436b95}.creator-web-receipt form{margin-top:14px}.creator-web-receipt fieldset{display:grid;gap:12px;border:0;padding:0;margin:0;min-width:0}

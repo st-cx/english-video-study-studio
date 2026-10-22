@@ -168,7 +168,8 @@ def _safe(job):
                'rights_confirmed', 'auto_publish', 'error', 'created_at', 'updated_at',
                'bvid', 'aid', 'url', 'creator_url', 'bundle_file', 'blockers', 'attempted_at',
                'stage', 'progress', 'stage_message', 'last_event', 'cid', 'error_code',
-               'candidates', 'reconciliation_status', 'reconciled_at'}
+               'candidates', 'reconciliation_status', 'reconciled_at', 'submitted_at',
+               'submission_method', 'receipt_verified_via', 'platform_status'}
     return {key: job[key] for key in allowed if key in job}
 
 
@@ -886,6 +887,44 @@ def pause_auto_publication(publication_id: str) -> dict:
         job.update(auto_publish=False, updated_at=_now())
         return _safe(job)
     return _mutate(pause)
+
+
+def record_web_receipt(publication_id: str, bvid: str, package_provider=None, *,
+                       confirmed_in_creator_center=False) -> dict:
+    """Register an explicit creator-centre confirmation without account access.
+
+    This is a local receipt, not an SDK verification or evidence of moderation
+    approval. Keep the original draft's media identity and permanently prevent
+    the automatic dispatcher from submitting that same draft again.
+    """
+    if confirmed_in_creator_center is not True:
+        raise ValueError('请先在B站官方创作中心确认该稿件已提交，再登记回执。')
+    if not isinstance(bvid, str) or not re.fullmatch(r'BV[A-Za-z0-9]{10}', bvid):
+        raise ValueError('请填写官方创作中心显示的有效BV编号。')
+
+    def register(jobs):
+        job = _get(jobs, publication_id)
+        if job['id'] in _ACTIVE:
+            raise ValueError('本机正在提交这份稿件，不能覆盖投稿结果，请先核对。')
+        if (job['status'] == 'published' and job.get('bvid') == bvid
+                and job.get('submission_method') == 'official_web'):
+            return _safe(job)
+        if job['status'] not in {'draft', 'blocked'} or job.get('attempted_at'):
+            raise ValueError('这份稿件已有提交或待确认记录，不能覆盖；请先到创作中心核对。')
+        if any(other['id'] != job['id'] and other.get('bvid') == bvid for other in jobs):
+            raise ValueError('该BV编号已登记到另一份稿件，不能重复认领。')
+        # The same atomic claim protects against an automatic worker racing
+        # this receipt. Revalidate the exact package, source media and MP4.
+        _current(job, package_provider)
+        stamp = _now()
+        job.update(status='published', bvid=bvid, url='https://www.bilibili.com/video/' + bvid,
+                   auto_publish=False, attempted_at=stamp, submitted_at=stamp,
+                   submission_method='official_web', receipt_verified_via='user_confirmation',
+                   platform_status='submitted', stage='accepted', progress=100,
+                   stage_message='已登记官方创作中心的投稿确认；审核状态请在B站查看。',
+                   error='', blockers=[], updated_at=stamp)
+        return _safe(job)
+    return _mutate(register)
 
 
 def reconcile_publication(publication_id: str) -> dict:

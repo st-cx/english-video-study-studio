@@ -429,7 +429,7 @@ def recover_saved_jobs():
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'EnglishVideoStudio/0.6.1'
+    server_version = 'EnglishVideoStudio/0.6.2'
 
     def log_message(self, fmt, *args):
         LOG.info('%s %s', self.command, urlparse(self.path).path)
@@ -491,7 +491,7 @@ class Handler(BaseHTTPRequestHandler):
             route = urlparse(self.path)
             if route.path == '/api/status':
                 settings = get_settings()
-                return self._json(200, {'name': '英语视频学习工作室', 'kind': 'universal', 'version': '0.6.1',
+                return self._json(200, {'name': '英语视频学习工作室', 'kind': 'universal', 'version': '0.6.2',
                                         'api_key_configured': has_api_key(), 'model': settings['model'], 'base_url': settings['base_url'],
                                         'daily_check_enabled': False, 'chunk_size': CHUNK_SIZE, 'max_media_size': MAX_MEDIA_SIZE})
             if route.path == '/api/jobs':
@@ -600,8 +600,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == '/api/publishing/drafts':
                 package, folder = _package_provider(body.get('episode_id', ''))
                 return self._json(200, publishing.prepare_publication(package, folder, body.get('options', {})))
-            match = re.fullmatch(r'/api/publishing/([a-f0-9]{32})/(submit|bundle|reconcile|pause-auto)', path)
+            match = re.fullmatch(r'/api/publishing/([a-f0-9]{32})/(submit|bundle|reconcile|pause-auto|web-receipt)', path)
             if match:
+                if match[2] == 'web-receipt':
+                    return self._json(200, publishing.record_web_receipt(match[1], body.get('bvid'), _package_provider, confirmed_in_creator_center=body.get('confirmed_in_creator_center') is True))
                 if match[2] == 'pause-auto':
                     return self._json(200, publishing.pause_auto_publication(match[1]))
                 if match[2] == 'reconcile':
