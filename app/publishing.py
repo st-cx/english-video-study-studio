@@ -612,6 +612,15 @@ def _text(value, name, maximum, required=False):
     return result
 
 
+def _platform_description(description, source, copyright_value):
+    # Original submissions have no separate platform source field. Preserve
+    # the author's full attribution and add the traceable source only once.
+    result = description
+    if copyright_value == 1 and source and source not in result:
+        result = (result + '\n\n' if result else '') + '原始来源：' + source
+    return _text(result, '简介（含原始来源）', 2000)
+
+
 def prepare_publication(package: dict, folder: Path, options: dict) -> dict:
     if not isinstance(package, dict) or not isinstance(options, dict):
         raise ValueError('投稿参数格式不正确。')
@@ -633,7 +642,7 @@ def prepare_publication(package: dict, folder: Path, options: dict) -> dict:
         parent, child = get_zone_info_by_tid(tid)
         if not parent or not child:
             raise ValueError('该B站投稿子分区不存在，请选择有效分区。')
-    copyright_value = options.get('copyright', 2)
+    copyright_value = options.get('copyright', 1)
     if type(copyright_value) is not int or copyright_value not in {1, 2}:
         raise ValueError('投稿类型须为自制或转载。')
     source = _text(options.get('source') or package.get('source', {}).get('url') or episode.get('source_url', ''), '来源', 200)
@@ -648,6 +657,7 @@ def prepare_publication(package: dict, folder: Path, options: dict) -> dict:
     if any(',' in tag or '\n' in tag for tag in tags):
         raise ValueError('单个标签不能包含逗号或换行。')
     description = _text(options.get('description', ''), '简介', 2000)
+    _platform_description(description, source, copyright_value)
     rights = options.get('rights_confirmed') is True
     auto = options.get('auto_publish') is True
     if auto and not rights:
@@ -717,7 +727,8 @@ def _current(job, provider=None):
 
 def _metadata(job):
     value = {'title': job['title'], 'copyright': job['copyright'], 'tid': job['tid'],
-             'tag': ','.join(job['tags']), 'desc_format_id': 9999, 'desc': job['description'],
+             'tag': ','.join(job['tags']), 'desc_format_id': 9999,
+             'desc': _platform_description(job['description'], job.get('source', ''), job['copyright']),
              'recreate': -1, 'dynamic': '', 'interactive': 0, 'act_reserve_create': 0,
              'no_disturbance': 0, 'no_reprint': 0 if job['copyright'] == 2 else 1, 'subtitle': {'open': 0, 'lan': ''},
              'dolby': 0, 'lossless_music': 0, 'web_os': 1}

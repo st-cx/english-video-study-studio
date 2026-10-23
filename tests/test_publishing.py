@@ -105,7 +105,7 @@ class PublishingTests(unittest.TestCase):
         (self.folder / 'episode.json').write_text(json.dumps(self.package), encoding='utf-8')
 
     def draft(self, **options):
-        return pub.prepare_publication(self.package, self.folder, {'rights_confirmed': True, **options})
+        return pub.prepare_publication(self.package, self.folder, {'rights_confirmed': True, 'copyright': 2, **options})
 
     def login(self):
         start = pub.start_login()
@@ -183,12 +183,63 @@ class PublishingTests(unittest.TestCase):
         no_source = copy.deepcopy(self.package)
         no_source['source'] = {}
         with self.assertRaisesRegex(ValueError, '来源'):
-            pub.prepare_publication(no_source, self.folder, {'rights_confirmed': True})
+            pub.prepare_publication(no_source, self.folder, {'copyright': 2, 'rights_confirmed': True})
         own = pub.prepare_publication(no_source, self.folder, {'copyright': 1, 'rights_confirmed': True})
         self.assertEqual(own['copyright'], 1)
         for options in ({'copyright': True}, {'tid': True}, {'tags': []}, {'tags': ['x'] * 11}, {'title': 'x' * 81}):
             with self.subTest(options=options), self.assertRaises(ValueError):
                 self.draft(**options)
+
+    def test_new_draft_defaults_to_original_and_preserves_source_in_platform_description(self):
+        description = '作品作者、许可和修改说明完整保留。'
+        draft = pub.prepare_publication(self.package, self.folder,
+            {'rights_confirmed': True, 'description': description})
+        self.assertEqual(draft['copyright'], 1)
+        self.assertEqual(draft['source'], 'https://example.org/source')
+        metadata = pub._metadata(draft)
+        self.assertNotIn('source', metadata)
+        self.assertEqual(metadata['desc'], description + '\n\n原始来源：https://example.org/source')
+        self.assertEqual(draft['description'], description)
+
+    def test_explicit_repost_still_overrides_the_new_default(self):
+        own = pub.prepare_publication(self.package, self.folder, {'rights_confirmed': True})
+        repost = pub.prepare_publication(self.package, self.folder, {'rights_confirmed': True, 'copyright': 2})
+        self.assertEqual(own['copyright'], 1)
+        self.assertEqual(repost['copyright'], 2)
+        self.assertNotEqual(own['id'], repost['id'])
+        self.assertEqual(pub._metadata(repost)['source'], 'https://example.org/source')
+        self.assertEqual(pub._metadata(repost)['desc'], '')
+
+    def test_new_default_never_mutates_saved_or_submitted_repost_records(self):
+        self.draft(title='Saved repost')
+        submitted = self.draft(title='Previously submitted repost')
+        pub._finish(submitted['id'], status='published', bvid='BV1234567890', aid=123,
+                    attempted_at='2026-01-01T00:00:00Z')
+        previous = copy.deepcopy(pub._read_jobs())
+        new = pub.prepare_publication(self.package, self.folder, {'rights_confirmed': True})
+        self.assertEqual(new['copyright'], 1)
+        current = {job['id']: job for job in pub._read_jobs()}
+        for old in previous:
+            with self.subTest(status=old['status']):
+                self.assertEqual(current[old['id']], old)
+                self.assertEqual(current[old['id']]['copyright'], 2)
+        self.assertFalse(self.transport.calls)
+
+    def test_original_metadata_does_not_duplicate_an_existing_source_or_remove_attribution(self):
+        description = '原作者与授权链接保留。\n原始来源：https://example.org/source\n节选与字幕修改说明。'
+        draft = self.draft(copyright=1, description=description)
+        metadata = pub._metadata(draft)
+        self.assertEqual(metadata['desc'], description)
+        self.assertEqual(metadata['desc'].count('https://example.org/source'), 1)
+        self.assertNotIn('source', metadata)
+
+    def test_description_limit_includes_added_source_before_preparing_upload(self):
+        with self.assertRaisesRegex(ValueError, '简介'):
+            self.draft(copyright=1, description='x' * 2000)
+        self.assertFalse(self.transport.calls)
+        self.assertEqual(pub.list_publications(), [])
+        repost = self.draft(copyright=2, description='x' * 2000)
+        self.assertEqual(len(pub._metadata(repost)['desc']), 2000)
 
     def test_quality_chapters_and_sync_cannot_be_bypassed(self):
         original = copy.deepcopy(self.package)
